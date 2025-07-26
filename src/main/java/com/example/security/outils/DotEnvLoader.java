@@ -9,6 +9,7 @@ import java.nio.file.Paths;
 
 @Component
 public class DotEnvLoader {
+
     @PostConstruct
     public void loadEnv() {
         try {

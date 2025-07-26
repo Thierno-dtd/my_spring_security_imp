@@ -21,8 +21,10 @@ import java.io.IOException;
 @Service
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
+
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,@NonNull HttpServletResponse response,@NonNull FilterChain filterChain) throws ServletException, IOException {
         final String authHeader= request.getHeader("Authorization");
@@ -35,12 +37,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         userEmail=jwtService.extractuserEmail(token);
+
         if(authHeader==null || !authHeader.startsWith("Bearer ")){
             filterChain.doFilter(request,response);
             return;
         }
         jwt=authHeader.substring(7);
         //userEmail=jwtService.extractuserEmail(jwt);
+
         if(userEmail!=null && SecurityContextHolder.getContext().getAuthentication()==null){
             UserDetails userDetails=this.userDetailsService.loadUserByUsername(userEmail);
             if(jwtService.isTokenValid(token,userDetails)){
@@ -51,6 +55,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
         filterChain.doFilter(request,response);
     }
+
     private String getTokenFromRequest(HttpServletRequest request){
         final String authHeader=request.getHeader(HttpHeaders.AUTHORIZATION);
         if(StringUtils.hasLength(authHeader) && authHeader.startsWith("Bearer ")){
