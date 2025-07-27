@@ -1,0 +1,51 @@
+# ========================================
+# CONFIGURATION LOGSTASH - SECURITY API
+# ========================================
+
+# Configuration réseau
+http.host: "0.0.0.0"
+http.port: 9600
+
+# Configuration Elasticsearch pour monitoring
+xpack.monitoring.enabled: true
+xpack.monitoring.elasticsearch.hosts: ["http://elasticsearch:9200"]
+
+# Configuration pipeline
+pipeline.workers: 2
+pipeline.batch.size: 125
+pipeline.batch.delay: 50
+pipeline.unsafe_shutdown: false
+
+# Configuration mémoire
+pipeline.plugin_classloaders: false
+pipeline.separate_logs: false
+
+# Configuration logs internes
+log.level: info
+path.logs: /var/log/logstash
+
+# Configuration données
+path.data: /usr/share/logstash/data
+
+# Configuration sécurité (désactivée pour dev)
+xpack.security.enabled: false
+
+# Configuration métriques
+monitoring.enabled: true
+monitoring.elasticsearch.hosts: ["http://elasticsearch:9200"]
+
+# Configuration dead letter queue
+dead_letter_queue.enable: true
+dead_letter_queue.max_bytes: 1024mb
+
+# Configuration reload automatique
+config.reload.automatic: true
+config.reload.interval: 3s
+
+# Configuration queue
+queue.type: memory
+queue.max_events: 0
+queue.max_bytes: 1024mb
+
+# Configuration SSL (désactivée pour dev)
+# ssl.enabled: false

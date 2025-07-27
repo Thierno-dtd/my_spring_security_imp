@@ -6,10 +6,16 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
       - "9200:9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cat/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.11.0
@@ -18,20 +24,41 @@ services:
       - "5601:5601"
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=kibana
     depends_on:
-      - elasticsearch
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   logstash:
     image: docker.elastic.co/logstash/logstash:8.11.0
     container_name: logstash
     ports:
-      - "5044:5044"
-      - "9600:9600"
+      - "5044:5044"  # Beats input
+      - "7001:7001"  # HTTP input pour Spring Boot
+      - "9600:9600"  # Monitoring
     volumes:
-      - ./logstash/config:/usr/share/logstash/pipeline
+      - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+    environment:
+      - "LS_JAVA_OPTS=-Xmx256m -Xms256m"
     depends_on:
-      - elasticsearch
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9600"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
 volumes:
   elasticsearch_data:
+    driver: local
 
+networks:
+  default:
+    name: elk-network

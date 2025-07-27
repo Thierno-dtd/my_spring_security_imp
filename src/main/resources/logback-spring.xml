@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- ========== APPENDERS DE BASE ========== -->
+
+    <!-- Console Appender -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- File Appender pour logs généraux -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>./logs/security-app.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>./logs/security-app.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- File Appender spécifique pour les AUDITS -->
+    <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>./logs/audit.log</file>
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp/>
+                <logLevel/>
+                <loggerName/>
+                <message/>
+                <mdc/>
+                <arguments/>
+                <pattern>
+                    <pattern>
+                        {
+                        "application": "security-api",
+                        "environment": "${spring.profiles.active:-dev}",
+                        "server": "${HOSTNAME:-localhost}",
+                        "log_type": "audit"
+                        }
+                    </pattern>
+                </pattern>
+            </providers>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>./logs/audit.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>90</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <!-- File Appender spécifique pour la SÉCURITÉ -->
+    <appender name="SECURITY_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>./logs/security.log</file>
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp/>
+                <logLevel/>
+                <loggerName/>
+                <message/>
+                <mdc/>
+                <arguments/>
+                <pattern>
+                    <pattern>
+                        {
+                        "application": "security-api",
+                        "environment": "${spring.profiles.active:-dev}",
+                        "server": "${HOSTNAME:-localhost}",
+                        "log_type": "security"
+                        }
+                    </pattern>
+                </pattern>
+            </providers>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>./logs/security.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>365</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <!-- HTTP Appender pour ELK Stack -->
+    <appender name="ELK_HTTP" class="ch.qos.logback.core.http.HttpPostAppender">
+        <url>http://localhost:7001</url>
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp/>
+                <logLevel/>
+                <loggerName/>
+                <message/>
+                <mdc/>
+                <stackTrace/>
+                <pattern>
+                    <pattern>
+                        {
+                        "application": "security-api",
+                        "environment": "${spring.profiles.active:-dev}",
+                        "server": "${HOSTNAME:-localhost}"
+                        }
+                    </pattern>
+                </pattern>
+            </providers>
+        </encoder>
+    </appender>
+
+    <!-- ========== LOGGERS SPÉCIFIQUES ========== -->
+
+    <!-- Logger pour les AUDITS -->
+    <logger name="com.example.security.logs.AuditService" level="INFO" additivity="false">
+        <appender-ref ref="AUDIT_FILE"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- Logger pour la SÉCURITÉ -->
+    <logger name="SECURITY" level="WARN" additivity="false">
+        <appender-ref ref="SECURITY_FILE"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- Logger pour l'authentification -->
+    <logger name="com.example.security.auth" level="DEBUG" additivity="false">
+        <appender-ref ref="AUDIT_FILE"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- Logger pour JWT -->
+    <logger name="com.example.security.configuraton.JwtService" level="DEBUG"/>
+
+    <!-- ========== CONFIGURATION PAR PROFIL ========== -->
+
+    <!-- Profil DÉVELOPPEMENT -->
+    <springProfile name="dev">
+        <root level="DEBUG">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+            <appender-ref ref="AUDIT_FILE"/>
+            <appender-ref ref="SECURITY_FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- Profil PRODUCTION -->
+    <springProfile name="prod">
+        <root level="INFO">
+            <appender-ref ref="FILE"/>
+            <appender-ref ref="AUDIT_FILE"/>
+            <appender-ref ref="SECURITY_FILE"/>
+            <appender-ref ref="ELK_HTTP"/>
+        </root>
+    </springProfile>
+
+    <!-- Profil TEST -->
+    <springProfile name="test">
+        <root level="DEBUG">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- Profil par défaut -->
+    <springProfile name="!prod &amp; !dev &amp; !test">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+            <appender-ref ref="AUDIT_FILE"/>
+            <appender-ref ref="SECURITY_FILE"/>
+        </root>
+    </springProfile>
+
+</configuration>
