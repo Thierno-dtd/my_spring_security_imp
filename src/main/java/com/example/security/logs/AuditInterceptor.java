@@ -1,74 +1,138 @@
 package com.example.security.logs;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class AuditInterceptor implements HandlerInterceptor {
 
-    private final AuditService auditService;
+    @Autowired
+    private AuditService auditService;
+
+    // Cache pour éviter les doublons (nettoyage automatique)
+    private final Set<String> processedRequests = ConcurrentHashMap.newKeySet();
 
     @Override
-    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-        // Stocker le timestamp de début
-        request.setAttribute("startTime", System.currentTimeMillis());
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        // Créer une clé unique pour cette requête
+        String requestKey = createRequestKey(request);
+
+        // Éviter les doublons
+        if (processedRequests.contains(requestKey)) {
+            log.debug("Requête déjà traitée, éviter doublon: {}", requestKey);
+            return true;
+        }
+
+        // Marquer comme traitée
+        processedRequests.add(requestKey);
+
+        // Nettoyer le cache périodiquement (éviter memory leak)
+        if (processedRequests.size() > 10000) {
+            processedRequests.clear();
+            log.info("Cache des requêtes audit nettoyé");
+        }
+
         return true;
     }
 
     @Override
-    public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
-                                Object handler, Exception ex) {
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+        // Ne logger QUE si c'est un endpoint important ET si utilisateur authentifié
+        if (shouldLogRequest(request) && isUserAuthenticated()) {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            String userEmail = auth.getName();
+            String action = determineAction(request, response);
 
-        Long startTime = (Long) request.getAttribute("startTime");
-        long executionTime = startTime != null ? System.currentTimeMillis() - startTime : 0;
+            // Log avec des détails spécifiques
+            auditService.logAuditEvent(
+                    "API_CALL",
+                    userEmail,
+                    action + " - Status: " + response.getStatus(),
+                    request,
+                    null
+            );
 
+            log.debug("Audit logged for authenticated user: {} - Action: {}", userEmail, action);
+        }
+    }
+
+    /**
+     * Créer une clé unique pour identifier la requête
+     */
+    private String createRequestKey(HttpServletRequest request) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String user = (auth != null && auth.isAuthenticated()) ? auth.getName() : "anonymous";
+
+        return String.format("%s:%s:%s:%d",
+                request.getMethod(),
+                request.getRequestURI(),
+                user,
+                System.currentTimeMillis() / 1000 // Seconde actuelle
+        );
+    }
+
+    /**
+     * Déterminer si la requête doit être loggée
+     */
+    private boolean shouldLogRequest(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        String method = request.getMethod();
+
+        // NE PAS logger ces endpoints
+        if (uri.contains("/h2-console") ||
+                uri.contains("/swagger") ||
+                uri.contains("/v3/api-docs") ||
+                uri.contains("/actuator") ||
+                uri.contains("/favicon.ico") ||
+                uri.contains("/webjars") ||
+                uri.contains("/css") ||
+                uri.contains("/js")) {
+            return false;
+        }
+
+        // Logger SEULEMENT les actions importantes
+        return (uri.contains("/auth/") && !"GET".equals(method)) ||
+                (uri.contains("/admin/")) ||
+                (uri.contains("/users/") && !"GET".equals(method)) ||
+                ("POST".equals(method) || "PUT".equals(method) || "DELETE".equals(method));
+    }
+
+    /**
+     * Vérifier si l'utilisateur est vraiment authentifié (pas anonymous)
+     */
+    private boolean isUserAuthenticated() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null &&
+                auth.isAuthenticated() &&
+                !"anonymousUser".equals(auth.getName()) &&
+                !auth.getAuthorities().stream()
+                        .anyMatch(grantedAuthority ->
+                                grantedAuthority.getAuthority().equals("ROLE_ANONYMOUS"));
+    }
+
+    /**
+     * Déterminer l'action basée sur la requête
+     */
+    private String determineAction(HttpServletRequest request, HttpServletResponse response) {
+        String method = request.getMethod();
         String uri = request.getRequestURI();
 
-        // Logger les tentatives d'authentification
-        if (uri.contains("/auth/")) {
-            String eventType = determineEventType(uri, response.getStatus());
-            String userEmail = extractUserEmail(request);
-            String details = String.format("URI: %s, Status: %d, Method: %s",
-                    uri, response.getStatus(), request.getMethod());
+        if (uri.contains("/authenticate")) return "LOGIN_ATTEMPT";
+        if (uri.contains("/registerUser")) return "USER_REGISTRATION";
+        if (uri.contains("/registerAdmin")) return "ADMIN_REGISTRATION";
+        if (uri.contains("/logout")) return "LOGOUT";
+        if (uri.contains("/refresh")) return "TOKEN_REFRESH";
 
-            auditService.logAuditEvent(eventType, userEmail, details, request, executionTime);
-
-            // Si échec d'authentification, log sécurité
-            if (response.getStatus() == 401 || response.getStatus() == 403) {
-                auditService.logSecurityEvent(
-                        "AUTHENTICATION_FAILED",
-                        userEmail,
-                        "MEDIUM",
-                        "Échec d'authentification - " + details,
-                        request
-                );
-            }
-        }
-    }
-
-    private String determineEventType(String uri, int status) {
-        if (uri.contains("/authenticate")) {
-            return status == 200 ? "USER_LOGIN_SUCCESS" : "USER_LOGIN_FAILED";
-        } else if (uri.contains("/register")) {
-            return status == 200 ? "USER_REGISTRATION_SUCCESS" : "USER_REGISTRATION_FAILED";
-        } else if (uri.contains("/logout")) {
-            return "USER_LOGOUT";
-        }
-        return "AUTHENTICATION_REQUEST";
-    }
-
-    private String extractUserEmail(HttpServletRequest request) {
-        // Essayer d'extraire depuis le body de la requête (simplifiée)
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader != null) {
-            // Si token présent, extraire l'email (nécessiterait le JwtService)
-            return "authenticated_user";
-        }
-        return "anonymous";
+        return String.format("%s %s", method, uri);
     }
 }

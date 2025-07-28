@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -13,6 +14,8 @@ import java.util.Map;
 
 @Service
 @Slf4j
+@EnableAsync
+@Async("auditTaskExecutor")
 public class AuditService {
 
     @Autowired
@@ -30,7 +33,6 @@ public class AuditService {
     public void logAuditEvent(String eventType, String userEmail, String details,
                               HttpServletRequest request, Long executionTime) {
         try {
-            // Utilisation du service IP amélioré
             IpAddressService.IpInfo ipInfo = ipAddressService.getDetailedIpInfo(request);
 
             AuditLog auditLog = AuditLog.builder()

@@ -31,7 +31,7 @@ public class AuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
-    private final AuditService auditService; // AJOUTÉ
+    private final AuditService auditService;
 
     @Autowired
     public AuthenticationService(UserRepository utilisateurRepository, PasswordEncoder passwordEncoder, JwtService jwtService, AuthenticationManager authenticationManager, AuditService auditService) {
@@ -48,7 +48,7 @@ public class AuthenticationService {
 
         try {
             var user = User.builder()
-                    .name(request.getName()) // CORRIGÉ: était request.getPname()
+                    .name(request.getName())
                     .pname(request.getPname())
                     .email(request.getEmail())
                     .passwd(passwordEncoder.encode(request.getPasswd()))
@@ -59,7 +59,7 @@ public class AuthenticationService {
             var refreshToken = jwtService.generateRefreshToken(user);
             var jwtToken = jwtService.generateToken(user);
 
-            // AUDIT AJOUTÉ
+            // AUDIT
             long executionTime = System.currentTimeMillis() - startTime;
             auditService.logAuditEvent(
                     "USER_REGISTRATION_SUCCESS",
@@ -79,7 +79,7 @@ public class AuthenticationService {
                     .build();
 
         } catch (Exception e) {
-            // AUDIT D'ÉCHEC AJOUTÉ
+
             long executionTime = System.currentTimeMillis() - startTime;
             auditService.logAuditEvent(
                     "USER_REGISTRATION_FAILED",
