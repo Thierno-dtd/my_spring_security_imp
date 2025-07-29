@@ -1,5 +1,9 @@
 package com.example.security.logs;
 
+import com.example.security.logs.entities.AuditLog;
+import com.example.security.logs.entities.SecurityLog;
+import com.example.security.logs.repositories.AuditLogRepository;
+import com.example.security.logs.repositories.SecurityLogRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -17,7 +21,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/app/v1/admin/logs")
-@PreAuthorize("hasRole('ADMIN')") // Seuls les admins peuvent accéder
+@PreAuthorize("hasRole('ADMIN')")
 public class LogController {
 
     @Autowired
@@ -36,17 +40,13 @@ public class LogController {
         LocalDateTime last24h = LocalDateTime.now().minusHours(24);
         LocalDateTime last7days = LocalDateTime.now().minusDays(7);
 
-        // Statistiques générales
         dashboard.put("totalAuditLogs", auditLogRepository.count());
         dashboard.put("totalSecurityLogs", securityLogRepository.count());
 
-        // Activité récente
         dashboard.put("logsLast24h", auditLogRepository.findByTimestampBetween(last24h, LocalDateTime.now(), PageRequest.of(0, 1)).getTotalElements());
 
-        // Menaces critiques récentes
         dashboard.put("criticalThreats7days", securityLogRepository.countHighThreatsSince(last7days));
 
-        // Top IPs avec échecs de connexion
         dashboard.put("topFailedLoginIPs", auditLogRepository.getTopFailedLoginIPs(last7days));
 
         return ResponseEntity.ok(dashboard);
@@ -115,7 +115,6 @@ public class LogController {
         LocalDateTime since = LocalDateTime.now().minusHours(hours);
         Map<String, Object> analysis = new HashMap<>();
 
-        // Top utilisateurs avec échecs de connexion
         List<Object[]> failedLogins = auditLogRepository.getTopFailedLoginIPs(since);
         analysis.put("topFailedUsers", failedLogins);
         analysis.put("analysisDate", LocalDateTime.now());
@@ -135,7 +134,6 @@ public class LogController {
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
 
-        // Recherche simple (peut être améliorée avec une recherche full-text)
         Page<AuditLog> logs = auditLogRepository.findByUserEmailContainingIgnoreCase(query, pageable);
 
         return ResponseEntity.ok(logs);
@@ -145,12 +143,11 @@ public class LogController {
      * Export des logs (pour compliance/audit externe)
      */
     @GetMapping("/export")
-    @PreAuthorize("hasRole('ADMIN')") // Double vérification pour l'export
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<AuditLog>> exportLogs(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
 
-        // Limite à 10000 logs pour éviter la surcharge
         Pageable limit = PageRequest.of(0, 10000, Sort.by("timestamp").ascending());
         Page<AuditLog> logs = auditLogRepository.findByTimestampBetween(startDate, endDate, limit);
 
@@ -165,7 +162,6 @@ public class LogController {
         Map<String, Object> alerts = new HashMap<>();
         LocalDateTime lastHour = LocalDateTime.now().minusHours(1);
 
-        // Vérifier les menaces critiques de la dernière heure
         Long criticalThreats = securityLogRepository.countHighThreatsSince(lastHour);
         alerts.put("criticalThreatsLastHour", criticalThreats);
         alerts.put("alertLevel", criticalThreats > 5 ? "HIGH" : criticalThreats > 0 ? "MEDIUM" : "LOW");

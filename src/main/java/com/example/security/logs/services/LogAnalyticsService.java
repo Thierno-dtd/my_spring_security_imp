@@ -1,5 +1,7 @@
-package com.example.security.logs;
+package com.example.security.logs.services;
 
+import com.example.security.logs.repositories.AuditLogRepository;
+import com.example.security.logs.repositories.SecurityLogRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -28,7 +30,7 @@ public class LogAnalyticsService {
             String ip = (String) result[0];
             Long count = (Long) result[1];
 
-            if (count > 10) { // Plus de 10 tentatives = suspect
+            if (count > 10) {
                 anomalies.put("suspiciousIP_" + ip, Map.of(
                         "ip", ip,
                         "failedAttempts", count,

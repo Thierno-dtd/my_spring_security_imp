@@ -1,4 +1,4 @@
-package com.example.security.logs;
+package com.example.security.logs.entities;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -33,7 +33,7 @@ public class AuditLog {
     @Column(columnDefinition = "TEXT")
     private String details;
 
-    @Column(length = 45) // IPv6 max length
+    @Column(length = 45)
     private String ipAddress;
 
     @Column(length = 500)
@@ -52,8 +52,8 @@ public class AuditLog {
     private String threatLevel; // LOW, MEDIUM, HIGH, CRITICAL
 
     @Column
-    private Long executionTime; // en millisecondes
+    private Long executionTime;
 
-    @Column(columnDefinition = "JSON") // Pour MySQL/PostgreSQL
+    @Column(columnDefinition = "JSON")
     private String additionalData; // Données JSON supplémentaires
 }

@@ -1,5 +1,6 @@
-package com.example.security.logs;
+package com.example.security.logs.repositories;
 
+import com.example.security.logs.entities.AuditLog;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

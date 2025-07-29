@@ -108,7 +108,7 @@
     <!-- ========== LOGGERS SPÉCIFIQUES ========== -->
 
     <!-- Logger pour les AUDITS -->
-    <logger name="com.example.security.logs.AuditService" level="INFO" additivity="false">
+    <logger name="com.example.security.logs.services.AuditService" level="INFO" additivity="false">
         <appender-ref ref="AUDIT_FILE"/>
         <appender-ref ref="CONSOLE"/>
     </logger>

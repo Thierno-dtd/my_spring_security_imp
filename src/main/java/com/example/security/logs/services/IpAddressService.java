@@ -1,4 +1,4 @@
-package com.example.security.logs;
+package com.example.security.logs.services;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +24,6 @@ public class IpAddressService {
     public String getClientIpAddress(HttpServletRequest request) {
         String clientIp = null;
 
-        // 1. Vérifier les headers de proxy/load balancer
         String[] headerNames = {
                 "X-Forwarded-For",
                 "X-Real-IP",
@@ -48,13 +47,11 @@ public class IpAddressService {
             }
         }
 
-        // 2. Fallback vers RemoteAddr
         if (!isValidIp(clientIp)) {
             clientIp = request.getRemoteAddr();
             log.debug("IP via RemoteAddr: {}", clientIp);
         }
 
-        // 3. Si toujours localhost, essayer de deviner l'IP réseau
         if (isLocalhost(clientIp)) {
             String networkIp = guessNetworkIp();
             if (networkIp != null) {

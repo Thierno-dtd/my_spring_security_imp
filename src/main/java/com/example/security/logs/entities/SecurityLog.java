@@ -1,4 +1,4 @@
-package com.example.security.logs;
+package com.example.security.logs.entities;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

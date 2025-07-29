@@ -1,7 +1,7 @@
-package com.example.security.logs;
+package com.example.security.logs.config;
 
+import com.example.security.logs.AuditInterceptor;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;

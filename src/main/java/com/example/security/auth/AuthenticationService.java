@@ -3,7 +3,8 @@ package com.example.security.auth;
 import com.example.security.configuraton.JwtService;
 import com.example.security.constants.TypeRoles;
 import com.example.security.entites.User;
-import com.example.security.logs.AuditService;
+import com.example.security.logs.services.AuditService;
+import com.example.security.outils.DataEncryption;
 import com.example.security.repositories.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -32,14 +33,16 @@ public class AuthenticationService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final AuditService auditService;
+    private final DataEncryption dataEncryption;
 
     @Autowired
-    public AuthenticationService(UserRepository utilisateurRepository, PasswordEncoder passwordEncoder, JwtService jwtService, AuthenticationManager authenticationManager, AuditService auditService) {
+    public AuthenticationService(UserRepository utilisateurRepository, PasswordEncoder passwordEncoder, JwtService jwtService, AuthenticationManager authenticationManager, AuditService auditService, DataEncryption dataEncryption) {
         this.utilisateurRepository = utilisateurRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.authenticationManager = authenticationManager;
         this.auditService = auditService;
+        this.dataEncryption = dataEncryption;
     }
 
     public AuthenticationResponse register(RegisterRequest request) {
@@ -48,8 +51,8 @@ public class AuthenticationService {
 
         try {
             var user = User.builder()
-                    .name(request.getName())
-                    .pname(request.getPname())
+                    .name(dataEncryption.encryptSensitiveData(request.getName()))
+                    .pname(dataEncryption.encryptSensitiveData(request.getPname()))
                     .email(request.getEmail())
                     .passwd(passwordEncoder.encode(request.getPasswd()))
                     .roles(TypeRoles.USER)
@@ -108,8 +111,8 @@ public class AuthenticationService {
 
         try {
             var user = User.builder()
-                    .name(request.getName())
-                    .pname(request.getPname())
+                    .name(dataEncryption.encryptSensitiveData(request.getName()))
+                    .pname(dataEncryption.encryptSensitiveData(request.getPname()))
                     .email(request.getEmail())
                     .passwd(passwordEncoder.encode(request.getPasswd()))
                     .roles(TypeRoles.ADMIN)

@@ -1,7 +1,13 @@
-package com.example.security.logs;
+package com.example.security.logs.services;
 
+import com.example.security.constants.TypeThreatLevel;
+import com.example.security.logs.repositories.AuditLogRepository;
+import com.example.security.logs.entities.SecurityLog;
+import com.example.security.logs.entities.AuditLog;
+import com.example.security.logs.repositories.SecurityLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
@@ -11,6 +17,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -34,6 +41,8 @@ public class AuditService {
                               HttpServletRequest request, Long executionTime) {
         try {
             IpAddressService.IpInfo ipInfo = ipAddressService.getDetailedIpInfo(request);
+            String sessionId = extractSessionId(request);
+            log.error("putea"+ sessionId);
 
             AuditLog auditLog = AuditLog.builder()
                     .timestamp(LocalDateTime.now())
@@ -44,6 +53,7 @@ public class AuditService {
                     .userAgent(ipInfo.getUserAgent())
                     .requestUri(ipInfo.getRequestUri())
                     .httpMethod(ipInfo.getMethod())
+                    .sessionId(sessionId)
                     .sessionId(request.getSession(false) != null ? request.getSession().getId() : null)
                     .executionTime(executionTime)
                     .threatLevel(determineThreatLevel(eventType, ipInfo))
@@ -52,9 +62,8 @@ public class AuditService {
 
             auditLogRepository.save(auditLog);
 
-            // Log avec informations détaillées
-            log.info("AUDIT: {} - {} - {} | {}",
-                    eventType, userEmail, details, ipInfo.toString());
+            log.info("AUDIT: {} - {} - {} | Session: {} | {}",
+                    eventType, userEmail, details, sessionId, ipInfo.toString());
 
         } catch (Exception e) {
             log.error("Erreur sauvegarde audit DB, fallback vers fichier", e);
@@ -80,7 +89,6 @@ public class AuditService {
 
             securityLogRepository.save(securityLog);
 
-            // Log sécurité avec contexte IP
             log.warn("SECURITY: {} - {} - {} - {} | IP Info: {}",
                     securityEvent, userEmail, threatLevel, description, ipInfo.toString());
 
@@ -100,15 +108,15 @@ public class AuditService {
     private String determineThreatLevel(String eventType, IpAddressService.IpInfo ipInfo) {
         // Événements critiques
         if (eventType.contains("LOGIN_FAILED") && !ipInfo.isLocalhost()) {
-            return "MEDIUM";
+            return TypeThreatLevel.MEDIUM.name();
         }
 
         if (eventType.contains("SECURITY_BREACH") || eventType.contains("UNAUTHORIZED")) {
-            return "HIGH";
+            return TypeThreatLevel.HIGH.name();
         }
 
         if (eventType.contains("ADMIN_ACTION") && !ipInfo.isPrivateNetwork()) {
-            return "MEDIUM";
+            return TypeThreatLevel.MEDIUM.name();
         }
 
         return "LOW";
@@ -159,8 +167,22 @@ public class AuditService {
 
         // Si échec, log aussi en sécurité
         if ("FAILED".equals(result.toUpperCase())) {
-            logSecurityEvent("LOGIN_FAILURE", userEmail, "MEDIUM",
+            logSecurityEvent("LOGIN_FAILURE", userEmail, TypeThreatLevel.MEDIUM.name(),
                     "Échec de connexion", request);
         }
     }
+
+    private String extractSessionId(HttpServletRequest request) {
+        try {
+            HttpSession session = request.getSession(false);
+            if (session != null) {
+                return session.getId();
+            }
+            return "temp-" + UUID.randomUUID().toString().substring(0, 8);
+        } catch (Exception e) {
+            log.debug("Impossible d'extraire l'ID de session: {}", e.getMessage());
+            return "unknown-" + System.currentTimeMillis();
+        }
+    }
+
 }

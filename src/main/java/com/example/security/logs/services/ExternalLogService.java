@@ -1,4 +1,4 @@
-package com.example.security.logs;
+package com.example.security.logs.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -65,7 +65,6 @@ public class ExternalLogService {
                                   String description, String ipAddress) {
         sendToLogstash(securityEvent, userEmail, description, ipAddress, threatLevel);
 
-        // Si critique, envoyer aussi vers système d'alerte
         if ("CRITICAL".equals(threatLevel)) {
             sendCriticalAlert(securityEvent, userEmail, description, ipAddress);
         }
@@ -82,7 +81,6 @@ public class ExternalLogService {
             alert.put("source_ip", ipAddress);
             alert.put("application", "security-api");
 
-            // Ici vous pourriez envoyer vers Slack, PagerDuty, etc.
             log.error("🚨 ALERTE CRITIQUE: {} - {} - IP: {}", event, description, ipAddress);
 
         } catch (Exception e) {

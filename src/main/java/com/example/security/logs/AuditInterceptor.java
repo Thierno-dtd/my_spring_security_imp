@@ -1,5 +1,6 @@
 package com.example.security.logs;
 
+import com.example.security.logs.services.AuditService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -19,24 +20,19 @@ public class AuditInterceptor implements HandlerInterceptor {
     @Autowired
     private AuditService auditService;
 
-    // Cache pour éviter les doublons (nettoyage automatique)
     private final Set<String> processedRequests = ConcurrentHashMap.newKeySet();
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // Créer une clé unique pour cette requête
         String requestKey = createRequestKey(request);
 
-        // Éviter les doublons
         if (processedRequests.contains(requestKey)) {
             log.debug("Requête déjà traitée, éviter doublon: {}", requestKey);
             return true;
         }
 
-        // Marquer comme traitée
         processedRequests.add(requestKey);
 
-        // Nettoyer le cache périodiquement (éviter memory leak)
         if (processedRequests.size() > 10000) {
             processedRequests.clear();
             log.info("Cache des requêtes audit nettoyé");
@@ -47,13 +43,11 @@ public class AuditInterceptor implements HandlerInterceptor {
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
-        // Ne logger QUE si c'est un endpoint important ET si utilisateur authentifié
         if (shouldLogRequest(request) && isUserAuthenticated()) {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             String userEmail = auth.getName();
             String action = determineAction(request, response);
 
-            // Log avec des détails spécifiques
             auditService.logAuditEvent(
                     "API_CALL",
                     userEmail,
@@ -88,7 +82,6 @@ public class AuditInterceptor implements HandlerInterceptor {
         String uri = request.getRequestURI();
         String method = request.getMethod();
 
-        // NE PAS logger ces endpoints
         if (uri.contains("/h2-console") ||
                 uri.contains("/swagger") ||
                 uri.contains("/v3/api-docs") ||
@@ -100,7 +93,6 @@ public class AuditInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        // Logger SEULEMENT les actions importantes
         return (uri.contains("/auth/") && !"GET".equals(method)) ||
                 (uri.contains("/admin/")) ||
                 (uri.contains("/users/") && !"GET".equals(method)) ||
