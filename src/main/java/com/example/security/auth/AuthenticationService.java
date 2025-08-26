@@ -3,9 +3,9 @@ package com.example.security.auth;
 import com.example.security.configuraton.JwtService;
 import com.example.security.constants.TypeRoles;
 import com.example.security.entites.User;
-import com.example.security.logs.services.AuditService;
 import com.example.security.outils.DataEncryption;
 import com.example.security.repositories.UserRepository;
+import com.example.security.module.auditsLogs.AuditMicroserviceClient;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -32,16 +32,16 @@ public class AuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
-    private final AuditService auditService;
+    private final AuditMicroserviceClient auditMicroserviceClient;
     private final DataEncryption dataEncryption;
 
     @Autowired
-    public AuthenticationService(UserRepository utilisateurRepository, PasswordEncoder passwordEncoder, JwtService jwtService, AuthenticationManager authenticationManager, AuditService auditService, DataEncryption dataEncryption) {
+    public AuthenticationService(UserRepository utilisateurRepository, PasswordEncoder passwordEncoder, JwtService jwtService, AuthenticationManager authenticationManager, AuditMicroserviceClient auditMicroserviceClient, DataEncryption dataEncryption) {
         this.utilisateurRepository = utilisateurRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.authenticationManager = authenticationManager;
-        this.auditService = auditService;
+        this.auditMicroserviceClient = auditMicroserviceClient;
         this.dataEncryption = dataEncryption;
     }
 
@@ -64,7 +64,7 @@ public class AuthenticationService {
 
             // AUDIT
             long executionTime = System.currentTimeMillis() - startTime;
-            auditService.logAuditEvent(
+            auditMicroserviceClient.logAuditEvent(
                     "USER_REGISTRATION_SUCCESS",
                     request.getEmail(),
                     "Nouveau utilisateur enregistré avec succès",
@@ -84,7 +84,7 @@ public class AuthenticationService {
         } catch (Exception e) {
 
             long executionTime = System.currentTimeMillis() - startTime;
-            auditService.logAuditEvent(
+            auditMicroserviceClient.logAuditEvent(
                     "USER_REGISTRATION_FAILED",
                     request.getEmail(),
                     "Échec d'enregistrement: " + e.getMessage(),
@@ -92,7 +92,7 @@ public class AuthenticationService {
                     executionTime
             );
 
-            auditService.logSecurityEvent(
+            auditMicroserviceClient.logSecurityEvent(
                     "REGISTRATION_FAILED",
                     request.getEmail(),
                     "MEDIUM",
@@ -124,7 +124,7 @@ public class AuthenticationService {
 
             // AUDIT CRITIQUE POUR ADMIN
             long executionTime = System.currentTimeMillis() - startTime;
-            auditService.logAuditEvent(
+            auditMicroserviceClient.logAuditEvent(
                     "ADMIN_REGISTRATION_SUCCESS",
                     request.getEmail(),
                     "Nouvel administrateur enregistré",
@@ -132,7 +132,7 @@ public class AuthenticationService {
                     executionTime
             );
 
-            auditService.logSecurityEvent(
+            auditMicroserviceClient.logSecurityEvent(
                     "ADMIN_ACCOUNT_CREATED",
                     request.getEmail(),
                     "HIGH",
@@ -151,7 +151,7 @@ public class AuthenticationService {
 
         } catch (Exception e) {
             long executionTime = System.currentTimeMillis() - startTime;
-            auditService.logSecurityEvent(
+            auditMicroserviceClient.logSecurityEvent(
                     "ADMIN_REGISTRATION_FAILED",
                     request.getEmail(),
                     "CRITICAL",
@@ -172,7 +172,7 @@ public class AuthenticationService {
             UserDetails user = utilisateurRepository.findByEmail(request.getEmail())
                     .orElseThrow(() -> {
                         // AUDIT D'ÉCHEC - Utilisateur inexistant
-                        auditService.logSecurityEvent(
+                        auditMicroserviceClient.logSecurityEvent(
                                 "LOGIN_ATTEMPT_UNKNOWN_USER",
                                 request.getEmail(),
                                 "MEDIUM",
@@ -188,7 +188,7 @@ public class AuthenticationService {
 
                 // AUDIT DE SUCCÈS
                 long executionTime = System.currentTimeMillis() - startTime;
-                auditService.logAuditEvent(
+                auditMicroserviceClient.logAuditEvent(
                         "USER_LOGIN_SUCCESS",
                         request.getEmail(),
                         "Connexion réussie",
@@ -206,7 +206,7 @@ public class AuthenticationService {
                         .build();
             } else {
                 // AUDIT D'ÉCHEC - Mot de passe incorrect
-                auditService.logAuditEvent(
+                auditMicroserviceClient.logAuditEvent(
                         "USER_LOGIN_FAILED",
                         request.getEmail(),
                         "Mot de passe incorrect",
@@ -214,7 +214,7 @@ public class AuthenticationService {
                         System.currentTimeMillis() - startTime
                 );
 
-                auditService.logSecurityEvent(
+                auditMicroserviceClient.logSecurityEvent(
                         "LOGIN_FAILED_WRONG_PASSWORD",
                         request.getEmail(),
                         "HIGH",
@@ -228,7 +228,7 @@ public class AuthenticationService {
         } catch (Exception e) {
             // AUDIT GÉNÉRAL D'ÉCHEC
             long executionTime = System.currentTimeMillis() - startTime;
-            auditService.logAuditEvent(
+            auditMicroserviceClient.logAuditEvent(
                     "USER_LOGIN_ERROR",
                     request.getEmail(),
                     "Erreur lors de l'authentification: " + e.getMessage(),
@@ -256,7 +256,7 @@ public class AuthenticationService {
 
             // AUDIT
             long executionTime = System.currentTimeMillis() - startTime;
-            auditService.logAuditEvent(
+            auditMicroserviceClient.logAuditEvent(
                     "TOKEN_REFRESH_SUCCESS",
                     userEmail,
                     "Token rafraîchi avec succès",
@@ -272,7 +272,7 @@ public class AuthenticationService {
                     .build();
 
         } catch (Exception e) {
-            auditService.logSecurityEvent(
+            auditMicroserviceClient.logSecurityEvent(
                     "TOKEN_REFRESH_FAILED",
                     "unknown",
                     "MEDIUM",
@@ -294,7 +294,7 @@ public class AuthenticationService {
                 jwtService.blacklistToken(token);
 
                 // AUDIT DE DÉCONNEXION
-                auditService.logAuditEvent(
+                auditMicroserviceClient.logAuditEvent(
                         "USER_LOGOUT_SUCCESS",
                         userEmail,
                         "Déconnexion réussie, token blacklisté",
@@ -305,7 +305,7 @@ public class AuthenticationService {
                 log.info("👋 Utilisateur déconnecté: {}", userEmail);
 
             } catch (Exception e) {
-                auditService.logSecurityEvent(
+                auditMicroserviceClient.logSecurityEvent(
                         "LOGOUT_ERROR",
                         "unknown",
                         "MEDIUM",
@@ -315,7 +315,7 @@ public class AuthenticationService {
                 throw e;
             }
         } else {
-            auditService.logSecurityEvent(
+            auditMicroserviceClient.logSecurityEvent(
                     "LOGOUT_INVALID_TOKEN",
                     "unknown",
                     "MEDIUM",
