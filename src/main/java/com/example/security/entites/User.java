@@ -1,5 +1,6 @@
 package com.example.security.entites;
 
+import com.example.security.constants.AccountStatus;
 import com.example.security.constants.TypeRoles;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
@@ -13,6 +14,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -38,6 +40,41 @@ public class User implements UserDetails {
     @Column(name = "userRole",nullable = false)
     @Enumerated(EnumType.STRING)
     private TypeRoles roles;
+    @Column(name = "email_verified")
+    private Boolean emailVerified = false;
+
+    @Column(name = "email_verification_token")
+    private String emailVerificationToken;
+
+    @Column(name = "email_verification_expires_at")
+    private LocalDateTime emailVerificationExpiresAt;
+
+    @Column(name = "account_status")
+    @Enumerated(EnumType.STRING)
+    private AccountStatus accountStatus = AccountStatus.PENDING_VERIFICATION;
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+        if (emailVerified == null) {
+            emailVerified = false;
+        }
+        if (accountStatus == null) {
+            accountStatus = AccountStatus.PENDING_VERIFICATION;
+        }
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
@@ -60,17 +97,27 @@ public class User implements UserDetails {
     }
 
     @Override
-    public boolean isAccountNonLocked() {
-        return true;
-    }
+    public boolean isAccountNonLocked() {return accountStatus != AccountStatus.LOCKED;}
 
     @Override
-    public boolean isCredentialsNonExpired() {
-        return true;
-    }
+    public boolean isCredentialsNonExpired() {return true;}
 
     @Override
-    public boolean isEnabled() {
-        return true;
+    public boolean isEnabled() {return accountStatus == AccountStatus.ACTIVE;}
+
+    // methode utilitaire can login
+
+    public boolean isEmailVerified() {
+        return emailVerified != null && emailVerified;
+    }
+
+    public boolean canLogin() {
+        return isEmailVerified() && accountStatus == AccountStatus.ACTIVE;
+    }
+
+    public boolean hasValidVerificationToken() {
+        return emailVerificationToken != null &&
+                emailVerificationExpiresAt != null &&
+                emailVerificationExpiresAt.isAfter(LocalDateTime.now());
     }
 }
