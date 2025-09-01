@@ -4,9 +4,11 @@ import com.example.security.configuraton.JwtService;
 import com.example.security.constants.AccountStatus;
 import com.example.security.constants.TypeRoles;
 import com.example.security.dto.*;
+import com.example.security.entites.LoginAttempt;
 import com.example.security.entites.User;
 import com.example.security.module.notifications.NotificationClient;
 import com.example.security.outils.DataEncryption;
+import com.example.security.repositories.LoginAttemptRepository;
 import com.example.security.repositories.UserRepository;
 import com.example.security.module.auditsLogs.AuditMicroserviceClient;
 import jakarta.persistence.EntityNotFoundException;
@@ -14,21 +16,30 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
 public class AuthenticationService {
 
+    private final SessionService sessionService;
+    private final LoginAttemptRepository loginAttemptRepository;
     @Value("${jwt.expiration}")
     private String jwtExpiration;
 
@@ -41,20 +52,20 @@ public class AuthenticationService {
     private final UserRepository utilisateurRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-    private final AuthenticationManager authenticationManager;
     private final AuditMicroserviceClient auditMicroserviceClient;
     private final NotificationClient notificationClient;
     private final DataEncryption dataEncryption;
 
     @Autowired
-    public AuthenticationService(UserRepository utilisateurRepository, PasswordEncoder passwordEncoder, JwtService jwtService, AuthenticationManager authenticationManager, AuditMicroserviceClient auditMicroserviceClient, NotificationClient notificationClient, DataEncryption dataEncryption) {
+    public AuthenticationService(UserRepository utilisateurRepository, PasswordEncoder passwordEncoder, JwtService jwtService, AuthenticationManager authenticationManager, AuditMicroserviceClient auditMicroserviceClient, NotificationClient notificationClient, DataEncryption dataEncryption, SessionService sessionService, LoginAttemptRepository loginAttemptRepository) {
         this.utilisateurRepository = utilisateurRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
-        this.authenticationManager = authenticationManager;
         this.auditMicroserviceClient = auditMicroserviceClient;
         this.notificationClient = notificationClient;
         this.dataEncryption = dataEncryption;
+        this.sessionService = sessionService;
+        this.loginAttemptRepository = loginAttemptRepository;
     }
 
     /**
@@ -515,4 +526,160 @@ public class AuthenticationService {
                 .role(user.getRoles())
                 .build();
     }
+
+    public User findUserByEmail(String email) {
+        return utilisateurRepository.findByEmail(email)
+                .orElseThrow(() -> new EntityNotFoundException("Utilisateur non trouvé: " + email));
+    }
+
+    public PagedResponse<UserSummaryDto> getUsers(int page, int size, String sortBy, String sortDir, String search) {
+        Pageable pageable = PageRequest.of(page, size,
+                sortDir.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending());
+
+        Page<User> usersPage;
+        if (search != null && !search.trim().isEmpty()) {
+            usersPage = utilisateurRepository.findByEmailContainingOrNameContainingIgnoreCase(search, search, pageable);
+        } else {
+            usersPage = utilisateurRepository.findAll(pageable);
+        }
+
+        List<UserSummaryDto> userSummaries = usersPage.getContent().stream()
+                .map(this::mapToUserSummary)
+                .collect(Collectors.toList());
+
+        return PagedResponse.<UserSummaryDto>builder()
+                .content(userSummaries)
+                .page(page)
+                .size(size)
+                .totalElements(usersPage.getTotalElements())
+                .totalPages(usersPage.getTotalPages())
+                .first(usersPage.isFirst())
+                .last(usersPage.isLast())
+                .hasNext(usersPage.hasNext())
+                .hasPrevious(usersPage.hasPrevious())
+                .build();
+    }
+
+    /**
+     * Récupère les détails complets d'un utilisateur (Admin)
+     */
+    public AdminUserDetailDto getUserDetails(int userId) {
+        User user = utilisateurRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("Utilisateur non trouvé"));
+
+        // Récupérer les sessions actives
+        List<SessionInfo> activeSessions = sessionService.getActiveSessions(user, null);
+
+        // Récupérer les tentatives de connexion récentes
+        List<LoginAttemptSummary> recentAttempts = loginAttemptRepository
+                .findTop10ByEmailOrderByAttemptTimeDesc(user.getEmail())
+                .stream()
+                .map(this::mapToLoginAttemptSummary)
+                .collect(Collectors.toList());
+
+        return AdminUserDetailDto.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .name(dataEncryption.decryptSensitiveData(user.getName()))
+                .pname(dataEncryption.decryptSensitiveData(user.getPname()))
+                .role(user.getRoles())
+                .accountStatus(user.getAccountStatus())
+                .emailVerified(user.getEmailVerified())
+                .createdAt(user.getCreatedAt())
+                //.lastLogin(user.getLastLogin())
+                .updatedAt(user.getUpdatedAt())
+                .failedLoginAttempts(user.getFailedLoginAttempts())
+                .isTemporarilyLocked(user.isTemporarilyLocked())
+                .lockedUntil(user.getLockedUntil())
+                //.lastLoginIp(user.getLastLoginIp())
+               // .createdByAdmin(user.getCreatedByAdmin())
+                .activeSessions(activeSessions)
+                .recentLoginAttempts(recentAttempts)
+                .build();
+    }
+
+    /**
+     * Met à jour le statut d'un utilisateur (Admin)
+     */
+    @Transactional
+    public ResponseDto updateUserStatus(int userId, UserStatusUpdateRequest request, String adminEmail) {
+        User user = utilisateurRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("Utilisateur non trouvé"));
+
+        AccountStatus oldStatus = user.getAccountStatus();
+        user.setAccountStatus(request.getNewStatus());
+        user.setUpdatedAt(LocalDateTime.now());
+
+        // Si le compte est déverrouillé, réinitialiser les tentatives
+        if (request.getNewStatus() == AccountStatus.ACTIVE && oldStatus == AccountStatus.LOCKED) {
+            user.setFailedLoginAttempts(0);
+            user.setLockedUntil(null);
+        }
+
+        utilisateurRepository.save(user);
+
+        // Audit log
+        auditMicroserviceClient.logAuditEvent(
+                "USER_STATUS_UPDATED_BY_ADMIN",
+                user.getEmail(),
+                String.format("Statut changé de %s à %s par %s. Raison: %s",
+                        oldStatus, request.getNewStatus(), adminEmail, request.getReason()),
+                getCurrentHttpRequest(),
+                0L
+        );
+
+        // Notification à l'utilisateur si demandée
+        if (request.getSendNotification()) {
+            //sendStatusChangeNotification(user, oldStatus, request.getNewStatus(), request.getReason());
+        }
+
+        return ResponseDto.builder()
+                .success(true)
+                .message("Statut utilisateur mis à jour avec succès")
+                .build();
+    }
+
+    /**
+     * Méthodes utilitaires de mapping
+     */
+    private UserSummaryDto mapToUserSummary(User user) {
+        return UserSummaryDto.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .name(dataEncryption.decryptSensitiveData(user.getName()))
+                .pname(dataEncryption.decryptSensitiveData(user.getPname()))
+                .role(user.getRoles())
+                .accountStatus(user.getAccountStatus())
+                .emailVerified(user.getEmailVerified())
+                .createdAt(user.getCreatedAt())
+                //.lastLogin(user.getLastLogin())
+                .failedLoginAttempts(user.getFailedLoginAttempts())
+                .isTemporarilyLocked(user.isTemporarilyLocked())
+                .build();
+    }
+
+    private LoginAttemptSummary mapToLoginAttemptSummary(LoginAttempt attempt) {
+        return LoginAttemptSummary.builder()
+                .ipAddress(attempt.getIpAddress())
+                .success(attempt.getSuccess())
+                .failureReason(attempt.getFailureReason())
+                .attemptTime(attempt.getAttemptTime())
+                .userAgent(attempt.getUserAgent())
+                .build();
+    }
+
+    /*private void sendStatusChangeNotification(User user, AccountStatus oldStatus, AccountStatus newStatus, String reason) {
+        try {
+            String decryptedName = dataEncryption.decryptSensitiveData(user.getName());
+            notificationClient.sendAccountStatusChangeNotification(
+                    user.getEmail(),
+                    decryptedName,
+                    oldStatus.toString(),
+                    newStatus.toString(),
+                    reason
+            );
+        } catch (Exception e) {
+            log.error("Erreur envoi notification changement statut pour: {}", user.getEmail(), e);
+        }
+    }*/
 }

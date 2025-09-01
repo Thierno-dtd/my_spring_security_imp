@@ -2,6 +2,8 @@ package com.example.security.repositories;
 
 import com.example.security.constants.AccountStatus;
 import com.example.security.entites.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -75,4 +77,9 @@ public interface UserRepository extends JpaRepository<User, Integer> {
 
     @Query("SELECT COUNT(u) FROM User u WHERE u.lastSuccessfulLogin < :cutoffDate")
     long countInactiveUsers(@Param("cutoffDate") LocalDateTime cutoffDate);
+
+    @Query("SELECT u FROM User u WHERE u.email LIKE %:search% OR u.name LIKE %:search% ORDER BY u.createdAt DESC")
+    Page<User> findByEmailContainingOrNameContainingIgnoreCase(@Param("search") String search,
+                                                               @Param("search") String search2,
+                                                               Pageable pageable);
 }
