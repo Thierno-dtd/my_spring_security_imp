@@ -33,4 +33,46 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     @Query("DELETE FROM User u WHERE u.createdAt < :cutoffDate AND u.emailVerified = false")
 
     int cleanupUnverifiedAccountsOlderThan(@Param("cutoffDate") LocalDateTime cutoffDate);
+
+    // NOUVELLES méthodes pour password reset
+    Optional<User> findByPasswordResetToken(String token);
+
+    @Query("SELECT u FROM User u WHERE u.passwordResetExpiresAt < :now AND u.passwordResetToken IS NOT NULL")
+    List<User> findExpiredPasswordResetTokens(@Param("now") LocalDateTime now);
+
+    @Modifying
+    @Query("UPDATE User u SET u.passwordResetToken = NULL, u.passwordResetExpiresAt = NULL WHERE u.passwordResetExpiresAt < :cutoffDate")
+    int cleanupExpiredPasswordResetTokens(@Param("cutoffDate") LocalDateTime cutoffDate);
+
+    // NOUVELLES méthodes pour email change
+    Optional<User> findByEmailChangeToken(String token);
+    Optional<User> findByPendingEmail(String pendingEmail);
+
+    @Modifying
+    @Query("UPDATE User u SET u.emailChangeToken = NULL, u.emailChangeExpiresAt = NULL, u.pendingEmail = NULL WHERE u.emailChangeExpiresAt < :cutoffDate")
+    int cleanupExpiredEmailChangeTokens(@Param("cutoffDate") LocalDateTime cutoffDate);
+
+    // NOUVELLES méthodes pour account lockout
+    @Query("SELECT u FROM User u WHERE u.lockedUntil < :now AND u.lockedUntil IS NOT NULL")
+    List<User> findUsersToUnlock(@Param("now") LocalDateTime now);
+
+    @Modifying
+    @Query("UPDATE User u SET u.lockedUntil = NULL WHERE u.lockedUntil < :now")
+    int unlockExpiredLockouts(@Param("now") LocalDateTime now);
+
+    @Query("SELECT COUNT(u) FROM User u WHERE u.failedLoginAttempts >= :threshold")
+    long countUsersWithFailedAttempts(@Param("threshold") int threshold);
+
+    // NOUVELLES méthodes pour OAuth2
+    Optional<User> findByGoogleId(String googleId);
+
+    @Query("SELECT u FROM User u WHERE u.registrationMethod = :method")
+    List<User> findByRegistrationMethod(@Param("method") String method);
+
+    // Méthodes de sécurité et monitoring
+    @Query("SELECT u FROM User u WHERE u.lastLoginAttempt BETWEEN :start AND :end")
+    List<User> findUsersWithLoginAttemptsBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    @Query("SELECT COUNT(u) FROM User u WHERE u.lastSuccessfulLogin < :cutoffDate")
+    long countInactiveUsers(@Param("cutoffDate") LocalDateTime cutoffDate);
 }
