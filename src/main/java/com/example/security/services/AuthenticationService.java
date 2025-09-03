@@ -563,7 +563,7 @@ public class AuthenticationService {
     /**
      * Récupère les détails complets d'un utilisateur (Admin)
      */
-    public AdminUserDetailDto getUserDetails(int userId) {
+    public AdminUserDetailDto getUserDetails(Long userId) {
         User user = utilisateurRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("Utilisateur non trouvé"));
 
@@ -586,13 +586,13 @@ public class AuthenticationService {
                 .accountStatus(user.getAccountStatus())
                 .emailVerified(user.getEmailVerified())
                 .createdAt(user.getCreatedAt())
-                //.lastLogin(user.getLastLogin())
+                .lastLogin(user.getLastSuccessfulLogin())
                 .updatedAt(user.getUpdatedAt())
                 .failedLoginAttempts(user.getFailedLoginAttempts())
                 .isTemporarilyLocked(user.isTemporarilyLocked())
                 .lockedUntil(user.getLockedUntil())
-                //.lastLoginIp(user.getLastLoginIp())
-               // .createdByAdmin(user.getCreatedByAdmin())
+                .lastLoginIp(user.getLastLoginIp())
+                .createdByAdmin(user.getCreatedByAdmin())
                 .activeSessions(activeSessions)
                 .recentLoginAttempts(recentAttempts)
                 .build();
@@ -602,7 +602,7 @@ public class AuthenticationService {
      * Met à jour le statut d'un utilisateur (Admin)
      */
     @Transactional
-    public ResponseDto updateUserStatus(int userId, UserStatusUpdateRequest request, String adminEmail) {
+    public ResponseDto updateUserStatus(Long userId, UserStatusUpdateRequest request, String adminEmail) {
         User user = utilisateurRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("Utilisateur non trouvé"));
 
@@ -630,7 +630,7 @@ public class AuthenticationService {
 
         // Notification à l'utilisateur si demandée
         if (request.getSendNotification()) {
-            //sendStatusChangeNotification(user, oldStatus, request.getNewStatus(), request.getReason());
+            sendStatusChangeNotification(user, oldStatus, request.getNewStatus(), request.getReason());
         }
 
         return ResponseDto.builder()
@@ -652,7 +652,7 @@ public class AuthenticationService {
                 .accountStatus(user.getAccountStatus())
                 .emailVerified(user.getEmailVerified())
                 .createdAt(user.getCreatedAt())
-                //.lastLogin(user.getLastLogin())
+                .lastLogin(user.getLastSuccessfulLogin())
                 .failedLoginAttempts(user.getFailedLoginAttempts())
                 .isTemporarilyLocked(user.isTemporarilyLocked())
                 .build();
@@ -668,7 +668,7 @@ public class AuthenticationService {
                 .build();
     }
 
-    /*private void sendStatusChangeNotification(User user, AccountStatus oldStatus, AccountStatus newStatus, String reason) {
+    private void sendStatusChangeNotification(User user, AccountStatus oldStatus, AccountStatus newStatus, String reason) {
         try {
             String decryptedName = dataEncryption.decryptSensitiveData(user.getName());
             notificationClient.sendAccountStatusChangeNotification(
@@ -681,5 +681,5 @@ public class AuthenticationService {
         } catch (Exception e) {
             log.error("Erreur envoi notification changement statut pour: {}", user.getEmail(), e);
         }
-    }*/
+    }
 }

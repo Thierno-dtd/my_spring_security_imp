@@ -178,7 +178,7 @@ public class AuthenticationController {
                 .accountStatus(currentUser.getAccountStatus().name())
                 .emailVerified(currentUser.getEmailVerified())
                 .createdAt(currentUser.getCreatedAt())
-                //.lastLogin(currentUser.getLastLogin())
+                .lastLogin(currentUser.getLastSuccessfulLogin())
                 .failedLoginAttempts(currentUser.getFailedLoginAttempts())
                 .isTemporarilyLocked(currentUser.isTemporarilyLocked())
                 .build();
@@ -466,7 +466,7 @@ public class AuthenticationController {
     )
     @GetMapping("/admin/users/{userId}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<AdminUserDetailDto> getUserDetails(@PathVariable int userId) {
+    public ResponseEntity<AdminUserDetailDto> getUserDetails(@PathVariable Long userId) {
         AdminUserDetailDto userDetails = authenticationService.getUserDetails(userId);
         return ResponseEntity.ok(userDetails);
     }
@@ -478,7 +478,7 @@ public class AuthenticationController {
     @PostMapping("/admin/users/{userId}/status")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ResponseDto> updateUserStatus(
-            @PathVariable int userId,
+            @PathVariable Long userId,
             @RequestBody UserStatusUpdateRequest request) {
 
         User currentAdmin = getCurrentUser();

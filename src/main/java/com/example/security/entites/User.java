@@ -27,7 +27,7 @@ import java.util.List;
 public class User implements UserDetails {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private Long id;
 
     @NotBlank(message = "Le champs nom ne peut pas être vide.")
     private String name;
@@ -91,6 +91,12 @@ public class User implements UserDetails {
 
     @Column(name = "last_successful_login")
     private LocalDateTime lastSuccessfulLogin;
+
+    @Column(name = "last_login_ip")
+    private String lastLoginIp;
+
+    @Column(name = "created_by_admin")
+    private String createdByAdmin;
 
     // NOUVEAUX CHAMPS pour OAuth2
     @Column(name = "google_id")

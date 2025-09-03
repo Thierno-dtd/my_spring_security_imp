@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 @Data
 @Builder
 public class UserSummaryDto {
-    private int id;
+    private Long id;
     private String email;
     private String name;
     private String pname;

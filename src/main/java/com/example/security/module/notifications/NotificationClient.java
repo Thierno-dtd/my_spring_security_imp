@@ -30,79 +30,102 @@ public class NotificationClient {
         this.restTemplate = new RestTemplate();
     }
 
-    /**
-     * Envoie un email de vérification
-     */
-    public void sendEmailVerification(String email, String name, String verificationToken) {
-        try {
-            NotificationRequestDto request = NotificationRequestDto.builder()
-                    .title("Vérification de votre adresse email")
-                    .type(NotificationType.SECURITY)
-                    .priority(NotificationPriority.HIGH)
-                    .recipientId(email)
-                    .recipientEmail(email)
-                    .channels(Set.of(ChannelType.EMAIL))
-                    .templateId("email_verification")
-                    .parameters(Map.of(
-                            "name", name,
-                            "verificationToken", verificationToken,
-                            "verificationUrl", generateVerificationUrl(verificationToken)
-                    ))
-                    .build();
-
+    public ResponseEntity<String> send(NotificationRequestDto request) {
+        try{
             String url = notificationServiceUrl + "/api/notifications/send";
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<NotificationRequestDto> entity = new HttpEntity<>(request, headers);
 
-            ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
-            log.info("response: {}", response.getBody());
-            if (response.getStatusCode().is2xxSuccessful()) {
-                log.info("✅ Email de vérification envoyé avec succès à: {}", email);
-            } else {
-                log.warn("⚠️ Réponse inattendue du service de notification: {}", response.getStatusCode());
-            }
+            ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);;
 
-        } catch (Exception e) {
-            log.error("❌ Erreur lors de l'envoi de l'email de vérification pour: {}", email, e);
+            log.info("✅ Email de bienvenue envoyé à: {}", request.recipientEmail);
+            return response;
+        }catch (Exception e) {
+            log.error("❌ Erreur lors de l'envoi de l'email de vérification pour: {}",  request.recipientEmail, e);
             // Ne pas faire échouer l'inscription à cause d'un problème d'email
             // mais logger l'erreur pour investigation
         }
+        return null;
+    }
+    /**
+     * Envoie un email de vérification
+     */
+    public void sendEmailVerification(String email, String name, String verificationToken) {
+
+        NotificationRequestDto request = NotificationRequestDto.builder()
+                .title("Vérification de votre adresse email")
+                .type(NotificationType.SECURITY)
+                .priority(NotificationPriority.HIGH)
+                .recipientId(email)
+                .recipientEmail(email)
+                .channels(Set.of(ChannelType.EMAIL))
+                .templateId("email_verification")
+                .parameters(Map.of(
+                        "name", name,
+                        "verificationToken", verificationToken,
+                        "verificationUrl", generateVerificationUrl(verificationToken)
+                ))
+                .build();
+
+        /*String url = notificationServiceUrl + "/api/notifications/send";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<NotificationRequestDto> entity = new HttpEntity<>(request, headers);
+
+        ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);*/
+        ResponseEntity<String> response = send(request);
+
+        log.info("response: {}", response.getBody());
+        if  (response == null) log.error("❌ Erreur lors de l'envoi de l'email de vérification pour: {}", email);
+
+        if (response.getStatusCode().is2xxSuccessful()) {
+            log.info("✅ Email de vérification envoyé avec succès à: {}", email);
+        } else {
+            log.warn("⚠️ Réponse inattendue du service de notification: {}", response.getStatusCode());
+
+        }
+
     }
 
     /**
      * Envoie un email de bienvenue après vérification
      */
     public void sendWelcomeEmail(String email, String name) {
-        try {
-            NotificationRequestDto request = NotificationRequestDto.builder()
-                    .title("Bienvenue sur notre plateforme !")
-                    .type(NotificationType.WELCOME)
-                    .priority(NotificationPriority.MEDIUM)
-                    .recipientId(email)
-                    .recipientEmail(email)
-                    .channels(Set.of(ChannelType.EMAIL))
-                    .templateId("welcome_email")
-                    .parameters(Map.of(
-                            "name", name,
-                            "loginUrl", generateLoginUrl()
-                    ))
-                    .build();
 
-            String url = notificationServiceUrl + "/api/notifications/send";
+        NotificationRequestDto request = NotificationRequestDto.builder()
+                .title("Bienvenue sur notre plateforme !")
+                .type(NotificationType.WELCOME)
+                .priority(NotificationPriority.MEDIUM)
+                .recipientId(email)
+                .recipientEmail(email)
+                .channels(Set.of(ChannelType.EMAIL))
+                .templateId("welcome_email")
+                .parameters(Map.of(
+                        "name", name,
+                        "loginUrl", generateLoginUrl()
+                ))
+                .build();
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<NotificationRequestDto> entity = new HttpEntity<>(request, headers);
+        /*String url = notificationServiceUrl + "/api/notifications/send";
 
-            restTemplate.postForEntity(url, entity, String.class);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<NotificationRequestDto> entity = new HttpEntity<>(request, headers);
 
+        restTemplate.postForEntity(url, entity, String.class);*/
+        ResponseEntity<String> response = send(request);
+
+        if(response == null) log.error("❌ Erreur lors de l'envoi de l'email de bienvenue pour: {}", email);
+        else
             log.info("✅ Email de bienvenue envoyé à: {}", email);
 
-        } catch (Exception e) {
-            log.error("❌ Erreur lors de l'envoi de l'email de bienvenue pour: {}", email, e);
-        }
+    }
+
+    public void sendAccountStatusChangeNotification(String email,String decryptedName,String oldstatus, String newStatus,String reason){
+
     }
 
     private String generateVerificationUrl(String token) {
