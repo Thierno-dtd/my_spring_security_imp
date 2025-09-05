@@ -40,15 +40,16 @@ public class NotificationClient {
 
             ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);;
 
-            log.info("✅ Email de bienvenue envoyé à: {}", request.recipientEmail);
+            log.info("✅ Email envoyé à: {}", request.recipientEmail);
             return response;
         }catch (Exception e) {
-            log.error("❌ Erreur lors de l'envoi de l'email de vérification pour: {}",  request.recipientEmail, e);
+            log.error("❌ Erreur lors de l'envoi de l'email pour: {}",  request.recipientEmail, e);
             // Ne pas faire échouer l'inscription à cause d'un problème d'email
             // mais logger l'erreur pour investigation
         }
         return null;
     }
+
     /**
      * Envoie un email de vérification
      */
@@ -69,13 +70,6 @@ public class NotificationClient {
                 ))
                 .build();
 
-        /*String url = notificationServiceUrl + "/api/notifications/send";
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<NotificationRequestDto> entity = new HttpEntity<>(request, headers);
-
-        ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);*/
         ResponseEntity<String> response = send(request);
 
         log.info("response: {}", response.getBody());
@@ -109,23 +103,38 @@ public class NotificationClient {
                 ))
                 .build();
 
-        /*String url = notificationServiceUrl + "/api/notifications/send";
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<NotificationRequestDto> entity = new HttpEntity<>(request, headers);
-
-        restTemplate.postForEntity(url, entity, String.class);*/
         ResponseEntity<String> response = send(request);
 
         if(response == null) log.error("❌ Erreur lors de l'envoi de l'email de bienvenue pour: {}", email);
-        else
-            log.info("✅ Email de bienvenue envoyé à: {}", email);
+        if (response.getStatusCode().is2xxSuccessful()) {
+            log.info("✅ Email de Bienvenue envoyé avec succès à: {}", email);
+        } else {
+            log.warn("⚠️ Réponse inattendue du service de notification: {}", response.getStatusCode());
+
+        }
 
     }
 
     public void sendAccountStatusChangeNotification(String email,String decryptedName,String oldstatus, String newStatus,String reason){
+        NotificationRequestDto request = NotificationRequestDto.builder()
+                .title("MISE A JOUR DU STATUT DU COMPTE D'UTILIISATEUR")
+                .content("Nous vous informons que votre compte utilisateur de est passé de "+oldstatus+" à "+newStatus+".\n  \tRaison : "+reason)
+                .type(NotificationType.ALERT)
+                .priority(NotificationPriority.MEDIUM)
+                .recipientId(email)
+                .recipientEmail(email)
+                .channels(Set.of(ChannelType.EMAIL))
+                .build();
 
+        ResponseEntity<String> response = send(request);
+        if(response == null) log.error("❌ Erreur lors de l'envoi de l'email d'updateStatus pour: {}", email);
+
+        if (response.getStatusCode().is2xxSuccessful()) {
+            log.info("✅ Email de UpdateStatus envoyé avec succès à: {}", email);
+        } else {
+            log.warn("⚠️ Réponse inattendue du service de notification: {}", response.getStatusCode());
+
+        }
     }
 
     private String generateVerificationUrl(String token) {

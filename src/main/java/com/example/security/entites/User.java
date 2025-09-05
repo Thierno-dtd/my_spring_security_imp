@@ -3,6 +3,7 @@ package com.example.security.entites;
 
 import com.example.security.constants.AccountStatus;
 import com.example.security.constants.TypeRoles;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -95,8 +96,11 @@ public class User implements UserDetails {
     @Column(name = "last_login_ip")
     private String lastLoginIp;
 
-    @Column(name = "created_by_admin")
-    private String createdByAdmin;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by_admin")
+    @JsonIgnore
+    private User createdByAdmin;
+
 
     // NOUVEAUX CHAMPS pour OAuth2
     @Column(name = "google_id")

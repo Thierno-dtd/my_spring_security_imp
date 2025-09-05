@@ -50,7 +50,7 @@ public class AuthenticationController {
             @ApiResponse(responseCode = "401", description = "Identifiants invalides"),
             @ApiResponse(responseCode = "423", description = "Compte temporairement verrouillé")
     })
-    @PostMapping(value = "/authenticate")
+    @PostMapping(value = "/simple/authenticate")
     public ResponseEntity<RefreshTokenRequest.AuthenticationResponse> authenticate(
             @Valid @RequestBody RefreshTokenRequest.AuthenticationRequest request) {
         return ResponseEntity.ok(authenticationService.authenticate(request));
@@ -61,7 +61,7 @@ public class AuthenticationController {
             description = "Crée un nouvel utilisateur standard avec email et mot de passe. Envoie un email de vérification."
     )
     @ApiResponse(responseCode = "200", description = "Utilisateur enregistré avec succès")
-    @PostMapping(value = "/registerUser")
+    @PostMapping(value = "/simple/registerUser")
     public ResponseEntity<RegisterResponse> registerUser(@Valid @RequestBody RegisterRequest request) {
         RegisterResponse response = authenticationService.register(request);
         return ResponseEntity.ok(response);
@@ -71,7 +71,7 @@ public class AuthenticationController {
             summary = "Vérifier un email",
             description = "Valide un compte utilisateur via le token de vérification reçu par email."
     )
-    @PostMapping(value = "/verify-email")
+    @PostMapping(value = "/simple/verify-email")
     public ResponseEntity<VerificationResponse> verifyEmail(@Valid @RequestBody VerificationRequest request) {
         VerificationResponse response = authenticationService.verifyEmail(request.getToken());
         return ResponseEntity.ok(response);
@@ -81,7 +81,7 @@ public class AuthenticationController {
             summary = "Renvoyer email de vérification",
             description = "Permet de renvoyer l'email de vérification si l'utilisateur n'a pas encore validé son compte."
     )
-    @PostMapping(value = "/resend-verification")
+    @PostMapping(value = "/simple/resend-verification")
     public ResponseEntity<Map<String, String>> resendVerificationEmail(@Valid @RequestBody ResendVerificationRequest request) {
         authenticationService.resendVerificationEmail(request.getEmail());
 
@@ -96,7 +96,7 @@ public class AuthenticationController {
             summary = "Inscription administrateur",
             description = "Crée un compte administrateur. Pas de vérification email requise."
     )
-    @PostMapping(value = "/registerAdmin")
+    @PostMapping(value = "/sessions/registerAdmin")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<RefreshTokenRequest.AuthenticationResponse> registerAdmin(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.ok(authenticationService.registerAdmin(request));
@@ -106,7 +106,7 @@ public class AuthenticationController {
             summary = "Rafraîchir le token JWT",
             description = "Utilise un refresh token valide pour obtenir un nouveau token JWT."
     )
-    @PostMapping(value = "/refresh")
+    @PostMapping(value = "/sessions/refresh")
     public ResponseEntity<RefreshTokenRequest.AuthenticationResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
         return ResponseEntity.ok(authenticationService.refreshToken(request));
     }
@@ -115,7 +115,7 @@ public class AuthenticationController {
             summary = "Déconnexion",
             description = "Déconnecte l'utilisateur courant en invalidant son token JWT."
     )
-    @PostMapping("/logout")
+    @PostMapping("/sessions/logout")
     public ResponseEntity<Map<String, String>> logout(@RequestHeader(value = "Authorization", required = false) String authHeader) {
         if (authHeader == null || authHeader.isEmpty()) {
             Map<String, String> errorResponse = new HashMap<>();
@@ -136,7 +136,7 @@ public class AuthenticationController {
             summary = "Statut du compte",
             description = "Retourne les informations d'état d'un compte utilisateur : existe, email vérifié, statut, etc."
     )
-    @GetMapping("/account-status/{email}")
+    @GetMapping("/sessions/account-status/{email}")
     public ResponseEntity<Map<String, Object>> getAccountStatus(@PathVariable String email) {
         try {
             AccountStatusInfo statusInfo = authenticationService.getAccountStatus(email);
@@ -164,10 +164,10 @@ public class AuthenticationController {
             summary = "Profil utilisateur complet",
             description = "Récupère toutes les informations du profil de l'utilisateur connecté"
     )
-    @GetMapping("/profile")
+    @GetMapping("/sessions/profile")
     @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
     public ResponseEntity<UserProfileResponse> getProfile() {
-        User currentUser = getCurrentUser();
+        User currentUser = authenticationService.getCurrentUser();
 
         UserProfileResponse profile = UserProfileResponse.builder()
                 .id(currentUser.getId())
@@ -190,7 +190,7 @@ public class AuthenticationController {
             summary = "Health Check",
             description = "Vérifie l'état du service d'authentification."
     )
-    @GetMapping("/health")
+    @GetMapping("/simple/health")
     public ResponseEntity<Map<String, Object>> healthCheck() {
         Map<String, Object> response = new HashMap<>();
         response.put("status", "UP");
@@ -221,7 +221,7 @@ public class AuthenticationController {
             @ApiResponse(responseCode = "200", description = "Email de récupération envoyé"),
             @ApiResponse(responseCode = "404", description = "Email non trouvé")
     })
-    @PostMapping("/password/reset-request")
+    @PostMapping("/simple/password/reset-request")
     public ResponseEntity<ResponseDto> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
         ResponseDto response = passwordService.requestPasswordReset(request);
         return ResponseEntity.ok(response);
@@ -235,7 +235,7 @@ public class AuthenticationController {
             @ApiResponse(responseCode = "200", description = "Mot de passe réinitialisé avec succès"),
             @ApiResponse(responseCode = "400", description = "Token invalide ou expiré")
     })
-    @PostMapping("/password/reset-confirm")
+    @PostMapping("/simple/password/reset-confirm")
     public ResponseEntity<ResponseDto> confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmRequest request) {
         ResponseDto response = passwordService.confirmPasswordReset(request);
         return ResponseEntity.ok(response);
@@ -249,7 +249,7 @@ public class AuthenticationController {
             @ApiResponse(responseCode = "200", description = "Mot de passe modifié avec succès"),
             @ApiResponse(responseCode = "400", description = "Ancien mot de passe incorrect")
     })
-    @PostMapping("/password/change")
+    @PostMapping("/sessions/password/change")
     @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
     public ResponseEntity<ResponseDto> changePassword(@Valid @RequestBody PasswordChangeRequest request) {
         ResponseDto response = passwordService.changePassword(request);
@@ -260,7 +260,7 @@ public class AuthenticationController {
             summary = "Vérification de la robustesse du mot de passe",
             description = "Évalue la sécurité d'un mot de passe selon différents critères"
     )
-    @PostMapping("/password/check-strength")
+    @PostMapping("/sessions/password/check-strength")
     public ResponseEntity<PasswordStrengthInfo> checkPasswordStrength(@RequestBody Map<String, String> request) {
         String password = request.get("password");
         PasswordStrengthInfo strengthInfo = passwordService.checkPasswordStrength(password);
@@ -273,7 +273,7 @@ public class AuthenticationController {
             summary = "Demande de changement d'email",
             description = "Initie le processus de changement d'adresse email. Un email de confirmation est envoyé à la nouvelle adresse."
     )
-    @PostMapping("/email/change-request")
+    @PostMapping("/sessions/email/change-request")
     @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
     public ResponseEntity<ResponseDto> requestEmailChange(@Valid @RequestBody EmailChangeRequest request) {
         ResponseDto response = emailChangeService.requestEmailChange(request);
@@ -284,7 +284,7 @@ public class AuthenticationController {
             summary = "Confirmation du changement d'email",
             description = "Finalise le changement d'email avec le token de confirmation reçu par email"
     )
-    @PostMapping("/email/change-confirm")
+    @PostMapping("/sessions/email/change-confirm")
     public ResponseEntity<ResponseDto> confirmEmailChange(@Valid @RequestBody EmailChangeConfirmRequest request) {
         ResponseDto response = emailChangeService.confirmEmailChange(request);
         return ResponseEntity.ok(response);
@@ -294,7 +294,7 @@ public class AuthenticationController {
             summary = "Annulation du changement d'email",
             description = "Annule une demande de changement d'email en cours"
     )
-    @PostMapping("/email/change-cancel")
+    @PostMapping("/sessions/email/change-cancel")
     @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
     public ResponseEntity<ResponseDto> cancelEmailChange() {
         ResponseDto response = emailChangeService.cancelEmailChange();
@@ -305,7 +305,7 @@ public class AuthenticationController {
             summary = "Statut du changement d'email",
             description = "Récupère l'état actuel d'une demande de changement d'email"
     )
-    @GetMapping("/email/change-status")
+    @GetMapping("/sessions/email/change-status")
     @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
     public ResponseEntity<EmailChangeStatus> getEmailChangeStatus() {
         EmailChangeStatus status = emailChangeService.getEmailChangeStatus();
@@ -316,7 +316,7 @@ public class AuthenticationController {
             summary = "Validation d'adresse email",
             description = "Vérifie la validité et la disponibilité d'une adresse email"
     )
-    @PostMapping("/email/validate")
+    @PostMapping("/sessions/email/validate")
     public ResponseEntity<EmailValidationResult> validateEmail(@RequestBody Map<String, String> request) {
         String email = request.get("email");
         EmailValidationResult result = emailChangeService.validateEmail(email);
@@ -333,7 +333,7 @@ public class AuthenticationController {
             @ApiResponse(responseCode = "200", description = "Authentification Google réussie"),
             @ApiResponse(responseCode = "400", description = "Token Google invalide")
     })
-    @PostMapping("/oauth2/google")
+    @PostMapping("/simple/oauth2/google")
     public ResponseEntity<RefreshTokenRequest.AuthenticationResponse> authenticateWithGoogle(@Valid @RequestBody OAuth2LoginRequest request) throws Exception {
         RefreshTokenRequest.AuthenticationResponse response = oAuth2Service.authenticateWithGoogle(request);
         return ResponseEntity.ok(response);
@@ -345,11 +345,11 @@ public class AuthenticationController {
             summary = "Sessions actives de l'utilisateur",
             description = "Récupère la liste de toutes les sessions actives de l'utilisateur connecté"
     )
-    @GetMapping("/sessions")
+    @GetMapping("/sessions/all-sessions")
     @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
     public ResponseEntity<List<SessionInfo>> getActiveSessions(@RequestHeader(value = "Authorization") String authHeader) {
-        String currentSessionId = extractSessionIdFromAuth(authHeader);
-        User currentUser = getCurrentUser();
+        String currentSessionId = authenticationService.extractSessionIdFromAuth(authHeader);
+        User currentUser = authenticationService.getCurrentUser();
 
         List<SessionInfo> sessions = sessionService.getActiveSessions(currentUser, currentSessionId);
         return ResponseEntity.ok(sessions);
@@ -381,8 +381,8 @@ public class AuthenticationController {
     @PostMapping("/sessions/logout-all-others")
     @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> logoutAllOtherSessions(@RequestHeader(value = "Authorization") String authHeader) {
-        String currentSessionId = extractSessionIdFromAuth(authHeader);
-        User currentUser = getCurrentUser();
+        String currentSessionId = authenticationService.extractSessionIdFromAuth(authHeader);
+        User currentUser = authenticationService.getCurrentUser();
 
         int loggedOutCount = sessionService.logoutAllOtherSessions(currentUser, currentSessionId);
 
@@ -399,7 +399,7 @@ public class AuthenticationController {
             summary = "Informations de verrouillage de compte",
             description = "Récupère les détails de verrouillage d'un compte utilisateur"
     )
-    @GetMapping("/lockout-info/{email}")
+    @GetMapping("/sessions/lockout-info/{email}")
     public ResponseEntity<LockoutInfo> getLockoutInfo(@PathVariable String email) {
         LockoutInfo lockoutInfo = lockoutService.getLockoutInfo(email);
         return ResponseEntity.ok(lockoutInfo);
@@ -411,14 +411,14 @@ public class AuthenticationController {
             summary = "Déverrouiller un compte (Admin)",
             description = "Permet à un administrateur de déverrouiller manuellement un compte utilisateur"
     )
-    @PostMapping("/admin/unlock-account")
+    @PostMapping("/sessions/admin/unlock-account")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, String>> unlockAccount(
             @RequestBody Map<String, String> request) {
 
         String email = request.get("email");
         String reason = request.get("reason");
-        User currentUser = getCurrentUser();
+        User currentUser = authenticationService.getCurrentUser();
 
         boolean success = lockoutService.unlockAccount(email, currentUser.getEmail(), reason);
 
@@ -436,7 +436,7 @@ public class AuthenticationController {
             summary = "Statistiques de sécurité (Admin)",
             description = "Fournit des statistiques détaillées sur la sécurité du système"
     )
-    @GetMapping("/admin/security-stats")
+    @GetMapping("/sessions/admin/security-stats")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<SecurityStats> getSecurityStats() {
         SecurityStats stats = lockoutService.getSecurityStats();
@@ -447,7 +447,7 @@ public class AuthenticationController {
             summary = "Liste des utilisateurs (Admin)",
             description = "Récupère la liste paginée de tous les utilisateurs"
     )
-    @GetMapping("/admin/users")
+    @GetMapping("/sessions/admin/users")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PagedResponse<UserSummaryDto>> getUsers(
             @RequestParam(defaultValue = "0") int page,
@@ -464,7 +464,7 @@ public class AuthenticationController {
             summary = "Détails d'un utilisateur (Admin)",
             description = "Récupère les détails complets d'un utilisateur spécifique"
     )
-    @GetMapping("/admin/users/{userId}")
+    @GetMapping("/sessions/admin/users/{userId}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AdminUserDetailDto> getUserDetails(@PathVariable Long userId) {
         AdminUserDetailDto userDetails = authenticationService.getUserDetails(userId);
@@ -475,69 +475,18 @@ public class AuthenticationController {
             summary = "Modifier le statut d'un compte (Admin)",
             description = "Permet de changer le statut d'un compte utilisateur (actif, suspendu, banni)"
     )
-    @PostMapping("/admin/users/{userId}/status")
+    @PostMapping("/sessions/admin/users/{userId}/status")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ResponseDto> updateUserStatus(
             @PathVariable Long userId,
             @RequestBody UserStatusUpdateRequest request) {
 
-        User currentAdmin = getCurrentUser();
+        User currentAdmin = authenticationService.getCurrentUser();
         ResponseDto response = authenticationService.updateUserStatus(userId, request, currentAdmin.getEmail());
         return ResponseEntity.ok(response);
     }
 
     // =============== MÉTHODES UTILITAIRES COMPLÉTÉES ===============
 
-    /**
-     * Extrait l'ID de session depuis le token JWT ou les headers
-     * Cette méthode analyse le token JWT pour extraire les claims personnalisés
-     * qui contiennent l'identifiant de session
-     */
-    private String extractSessionIdFromAuth(String authHeader) {
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            try {
-                String token = authHeader.substring(7);
-                // Essayer d'extraire l'ID de session depuis les claims du JWT
-                String sessionId = jwtService.extractClaim(token, claims -> (String) claims.get("sessionId"));
 
-                if (sessionId != null) {
-                    return sessionId;
-                }
-
-                // Fallback: générer un ID basé sur le token pour retrouver la session
-                String userEmail = jwtService.extractuserEmail(token);
-                return "session-" + userEmail.hashCode() + "-" + token.substring(token.length() - 10);
-
-            } catch (Exception e) {
-                log.warn("Impossible d'extraire l'ID de session du token: {}", e.getMessage());
-            }
-        }
-        return "unknown-session-" + System.currentTimeMillis();
-    }
-
-    /**
-     * Récupère l'utilisateur actuellement connecté depuis le contexte de sécurité Spring
-     * Cette méthode utilise le SecurityContext pour obtenir les détails de l'utilisateur authentifié
-     */
-    private User getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new IllegalStateException("Aucun utilisateur authentifié trouvé");
-        }
-
-        Object principal = authentication.getPrincipal();
-
-        if (principal instanceof User) {
-            return (User) principal;
-        }
-
-        if (principal instanceof String) {
-            // Si le principal est une chaîne (email), charger l'utilisateur depuis la base
-            String email = (String) principal;
-            return authenticationService.findUserByEmail(email);
-        }
-
-        throw new IllegalStateException("Type de principal non supporté: " + principal.getClass());
-    }
 }

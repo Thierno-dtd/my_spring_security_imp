@@ -21,6 +21,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -83,7 +85,7 @@ public class AuthenticationService {
 
             // Générer le token de vérification
             String verificationToken = generateVerificationToken();
-            log.info("putte  "+verificationToken);
+
             LocalDateTime expiresAt = LocalDateTime.now().plusHours(emailVerificationExpirationHours);
 
             // Créer l'utilisateur en attente de vérification
@@ -354,7 +356,12 @@ public class AuthenticationService {
             if (passwordEncoder.matches(request.getPassword(), user.getPassword())) {
                 String jwtToken = jwtService.generateToken(user);
                 String refreshToken = jwtService.generateRefreshToken(user);
-
+                String ip = httpRequest.getHeader("X-Forwarded-For");
+                if (ip == null) {
+                    ip = httpRequest.getRemoteAddr();
+                }
+                user.setLastLoginIp(ip);
+                utilisateurRepository.save(user);
                 // AUDIT DE SUCCÈS
                 long executionTime = System.currentTimeMillis() - startTime;
                 auditMicroserviceClient.logAuditEvent(
@@ -592,7 +599,13 @@ public class AuthenticationService {
                 .isTemporarilyLocked(user.isTemporarilyLocked())
                 .lockedUntil(user.getLockedUntil())
                 .lastLoginIp(user.getLastLoginIp())
-                .createdByAdmin(user.getCreatedByAdmin())
+                .createdByAdmin(
+                        user.getCreatedByAdmin() != null
+                                ? user.getCreatedByAdmin().getName() + "-"
+                                + user.getCreatedByAdmin().getUsername() + "-"
+                                + user.getCreatedByAdmin().getEmail()
+                                : null
+                )
                 .activeSessions(activeSessions)
                 .recentLoginAttempts(recentAttempts)
                 .build();
@@ -681,5 +694,58 @@ public class AuthenticationService {
         } catch (Exception e) {
             log.error("Erreur envoi notification changement statut pour: {}", user.getEmail(), e);
         }
+    }
+
+    /**
+     * Récupère l'utilisateur actuellement connecté depuis le contexte de sécurité Spring
+     * Cette méthode utilise le SecurityContext pour obtenir les détails de l'utilisateur authentifié
+     */
+    public User getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new IllegalStateException("Aucun utilisateur authentifié trouvé");
+        }
+
+        Object principal = authentication.getPrincipal();
+
+        if (principal instanceof User) {
+            return (User) principal;
+        }
+
+        if (principal instanceof String) {
+            // Si le principal est une chaîne (email), charger l'utilisateur depuis la base
+            String email = (String) principal;
+            return findUserByEmail(email);
+        }
+
+        throw new IllegalStateException("Type de principal non supporté: " + principal.getClass());
+    }
+
+    /**
+     * Extrait l'ID de session depuis le token JWT ou les headers
+     * Cette méthode analyse le token JWT pour extraire les claims personnalisés
+     * qui contiennent l'identifiant de session
+     */
+    public String extractSessionIdFromAuth(String authHeader) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            try {
+                String token = authHeader.substring(7);
+                // Essayer d'extraire l'ID de session depuis les claims du JWT
+                String sessionId = jwtService.extractClaim(token, claims -> (String) claims.get("sessionId"));
+
+                if (sessionId != null) {
+                    return sessionId;
+                }
+
+                // Fallback: générer un ID basé sur le token pour retrouver la session
+                String userEmail = jwtService.extractuserEmail(token);
+                return "session-" + userEmail.hashCode() + "-" + token.substring(token.length() - 10);
+
+            } catch (Exception e) {
+                log.warn("Impossible d'extraire l'ID de session du token: {}", e.getMessage());
+            }
+        }
+        return "unknown-session-" + System.currentTimeMillis();
     }
 }
