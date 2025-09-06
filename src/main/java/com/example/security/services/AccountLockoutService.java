@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -302,8 +303,8 @@ public class AccountLockoutService {
     private void sendAccountLockedNotification(User user, int lockoutDuration) {
         try {
             log.info("📧 Envoi notification verrouillage à: {} (durée: {}min)", user.getEmail(), lockoutDuration);
-            // TODO: Implémenter via NotificationClient
-            // notificationClient.sendAccountLockedNotification(user.getEmail(), user.getName(), lockoutDuration);
+
+            notificationClient.sendAccountLockedNotification(user.getEmail(), user.getName(), lockoutDuration);
         } catch (Exception e) {
             log.error("❌ Erreur envoi notification verrouillage pour: {}", user.getEmail(), e);
         }
@@ -318,7 +319,125 @@ public class AccountLockoutService {
         }
     }
 
+
     /**
+     * Notification d'activité suspecte par IP (nouvelle méthode)
+     */
+    public void sendSuspiciousActivityNotification(String ipAddress, long failureCount, String userEmail) {
+        try {
+            if (userEmail != null) {
+                User user = userRepository.findByEmail(userEmail).orElse(null);
+                if (user != null) {
+                    log.info("📧 Envoi notification activité suspecte à: {}", userEmail);
+
+                    // Utiliser un template générique de sécurité ou créer un template spécifique
+                    Map<String, String> parameters = Map.of(
+                            "ipAddress", ipAddress,
+                            "failureCount", String.valueOf(failureCount),
+                            "detectionTime", LocalDateTime.now().toString()
+                    );
+
+                    notificationClient.sendSuspiciousActivityNotification(user.getEmail(), user.getName(), parameters);
+                }
+            }
+        } catch (Exception e) {
+            log.error("❌ Erreur envoi notification activité suspecte pour IP: {}", ipAddress, e);
+        }
+    }
+
+    /**
+     * Alerte de sécurité pour tentatives multiples (nouvelle méthode)
+     */
+    public void sendSecurityAlert(String email, int failedAttempts, int remainingAttempts) {
+        try {
+            if (failedAttempts >= 3) { // Seuil d'alerte
+                User user = userRepository.findByEmail(email).orElse(null);
+                if (user != null) {
+                    log.info("📧 Envoi alerte sécurité à: {} ({} tentatives)", email, failedAttempts);
+
+                    // Template pour alerte avant verrouillage
+                    Map<String, String> parameters = Map.of(
+                            "failedAttempts", String.valueOf(failedAttempts),
+                            "remainingAttempts", String.valueOf(remainingAttempts),
+                            "maxAttempts", String.valueOf(maxFailedAttempts)
+                    );
+
+                    notificationClient.sendSecurityWarning(user.getEmail(), user.getName(), parameters);
+                }
+            }
+        } catch (Exception e) {
+            log.error("❌ Erreur envoi alerte sécurité pour: {}", email, e);
+        }
+    }
+
+    /**
+     * Rapport quotidien de sécurité (nouvelle méthode)
+     */
+    @Scheduled(cron = "0 0 8 * * ?") // Tous les jours à 8h
+    public void sendDailySecurityReport() {
+        try {
+            LocalDateTime yesterday = LocalDateTime.now().minusDays(1);
+
+            // Statistiques du jour précédent
+            long lockedAccounts = userRepository.countLockedAccountsSince(yesterday);
+            long failedAttempts = loginAttemptRepository.countFailedAttemptsSince(yesterday);
+            long suspiciousIPs = getSuspiciousIpCountSince(yesterday);
+
+            if (lockedAccounts > 0 || failedAttempts > 10) {
+                log.info("📊 Envoi rapport quotidien de sécurité");
+
+                Map<String, String> stats = Map.of(
+                        "date", yesterday.toLocalDate().toString(),
+                        "lockedAccounts", String.valueOf(lockedAccounts),
+                        "failedAttempts", String.valueOf(failedAttempts),
+                        "suspiciousIPs", String.valueOf(suspiciousIPs)
+                );
+
+                notificationClient.sendSecurityReport("admin@example.com", stats);
+            }
+
+        } catch (Exception e) {
+            log.error("❌ Erreur lors de l'envoi du rapport quotidien", e);
+        }
+    }
+
+    private long getSuspiciousIpCountSince(LocalDateTime since) {
+        List<Object[]> suspiciousIps = loginAttemptRepository.findSuspiciousIpAddresses(since, maxIpAttempts);
+        return suspiciousIps.size();
+    }
+
+    /**
+     * Méthode pour envoyer des notifications d'expiration de verrouillage
+     */
+    @Scheduled(fixedRate = 300000) // 5 minutes - à ajouter au nettoyage existant
+    public void notifyUpcomingUnlocks() {
+        try {
+            LocalDateTime in5Minutes = LocalDateTime.now().plusMinutes(5);
+            LocalDateTime in15Minutes = LocalDateTime.now().plusMinutes(15);
+
+            // Trouver les comptes qui seront déverrouillés bientôt
+            List<User> soonToBeUnlocked = userRepository.findUsersUnlockingSoon(in5Minutes, in15Minutes);
+
+            for (User user : soonToBeUnlocked) {
+                int minutesRemaining = calculateMinutesRemaining(user.getLockedUntil());
+
+                if (minutesRemaining <= 5 && minutesRemaining > 0) {
+                    log.info("📧 Notification de déverrouillage imminent pour: {}", user.getEmail());
+
+                    Map<String, String> parameters = Map.of(
+                            "minutesRemaining", String.valueOf(minutesRemaining)
+                    );
+
+                    notificationClient.sendUnlockSoonNotification(user.getEmail(), user.getName(), parameters);
+                }
+            }
+
+        } catch (Exception e) {
+            log.error("❌ Erreur lors des notifications de déverrouillage imminent", e);
+        }
+    }
+
+/**
      * Statistiques de sécurité
      */
     public SecurityStats getSecurityStats() {

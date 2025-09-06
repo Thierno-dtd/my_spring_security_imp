@@ -469,13 +469,11 @@ public class EmailChangeService {
         try {
             // Email à l'ancienne adresse
             log.info("📧 Envoi confirmation changement à l'ancienne adresse: {}", user.getEmail());
-            // TODO: Implémenter via NotificationClient
-            // notificationClient.sendEmailChangeRequestToOldEmail(user.getEmail(), user.getName(), user.getPendingEmail());
+            notificationClient.sendEmailChangeRequestToOldEmail(user.getEmail(), user.getName(), user.getPendingEmail());
 
             // Email à la nouvelle adresse avec token de confirmation
             log.info("📧 Envoi lien confirmation à la nouvelle adresse: {}", user.getPendingEmail());
-            // TODO: Implémenter via NotificationClient
-            // notificationClient.sendEmailChangeConfirmationToNewEmail(user.getPendingEmail(), user.getName(), token);
+            notificationClient.sendEmailChangeConfirmationToNewEmail(user.getPendingEmail(), user.getName(), token);
 
         } catch (Exception e) {
             log.error("❌ Erreur envoi emails changement pour: {}", user.getEmail(), e);
@@ -490,8 +488,7 @@ public class EmailChangeService {
             // Notification à la nouvelle adresse
             log.info("📧 Notification changement terminé à la nouvelle adresse: {}", newEmail);
 
-            // TODO: Implémenter via NotificationClient
-            // notificationClient.sendEmailChangeCompleteNotifications(oldEmail, newEmail);
+             notificationClient.sendEmailChangeCompleteNotifications(oldEmail, newEmail);
 
         } catch (Exception e) {
             log.error("❌ Erreur envoi notifications fin changement: {} -> {}", oldEmail, newEmail, e);

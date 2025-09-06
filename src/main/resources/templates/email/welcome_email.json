@@ -1,0 +1,13 @@
+{
+  "id": "welcome_email",
+  "name": "Email de bienvenue",
+  "description": "Template pour souhaiter la bienvenue après vérification email",
+  "type": "WELCOME",
+  "emailSubject": "Bienvenue ! Votre compte est maintenant actif",
+  "emailTemplate": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Bienvenue</title><style>body{font-family:Arial,sans-serif;margin:0;padding:0;background-color:#f4f4f4}.container{max-width:600px;margin:0 auto;background-color:white;padding:0}.header{background-color:#28a745;color:white;padding:20px;text-align:center}.content{padding:30px}.button{display:inline-block;background-color:#007bff;color:white;padding:12px 30px;text-decoration:none;border-radius:5px;margin:20px 0}.footer{background-color:#f8f9fa;padding:20px;text-align:center;font-size:12px;color:#6c757d}.feature{background-color:#f8f9fa;padding:15px;margin:10px 0;border-left:4px solid #007bff}</style></head><body><div class=\"container\"><div class=\"header\"><h1>🎉 Bienvenue {{name}} !</h1><p>Votre compte est maintenant actif</p></div><div class=\"content\"><p>Félicitations {{name}} !</p><p>Votre adresse email a été vérifiée avec succès et votre compte est maintenant pleinement activé.</p><div class=\"feature\"><h3>🚀 Prêt à commencer ?</h3><p>Vous pouvez maintenant accéder à toutes les fonctionnalités de notre plateforme.</p></div><div class=\"feature\"><h3>🔒 Sécurité</h3><p>Votre compte est sécurisé. Gardez vos identifiants confidentiels.</p></div><div class=\"feature\"><h3>💬 Support</h3><p>Notre équipe est là pour vous accompagner en cas de besoin.</p></div><p style=\"text-align: center;\"><a href=\"{{loginUrl}}\" class=\"button\">Accéder à mon compte</a></p><p>Merci de nous faire confiance !</p><p>L'équipe Support</p></div><div class=\"footer\"><p>Vous recevez cet email car vous venez de créer un compte.</p><p>© 2024 Votre Entreprise. Tous droits réservés.</p></div></div></body></html>",
+  "smsTemplate": null,
+  "pushTemplate": null,
+  "webTemplate": null,
+  "variables": ["name", "loginUrl"],
+  "isActive": true
+}

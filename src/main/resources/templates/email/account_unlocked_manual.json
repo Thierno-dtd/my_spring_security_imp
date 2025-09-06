@@ -1,0 +1,13 @@
+{
+  "id": "account_unlocked_manual",
+  "name": "Déverrouillage manuel",
+  "description": "Template pour notifier un déverrouillage manuel par un administrateur",
+  "type": "SECURITY",
+  "emailSubject": "✅ Votre compte a été déverrouillé",
+  "emailTemplate": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Compte Déverrouillé</title><style>body{font-family:Arial,sans-serif;margin:0;padding:0;background-color:#f4f4f4}.container{max-width:600px;margin:0 auto;background-color:white;padding:0}.header{background-color:#28a745;color:white;padding:20px;text-align:center}.content{padding:30px}.success-box{background-color:#d4edda;border:1px solid #c3e6cb;padding:15px;border-radius:5px;margin:20px 0}.button{display:inline-block;background-color:#007bff;color:white;padding:12px 30px;text-decoration:none;border-radius:5px;margin:20px 0}.footer{background-color:#f8f9fa;padding:20px;text-align:center;font-size:12px;color:#6c757d}</style></head><body><div class=\"container\"><div class=\"header\"><h1>🔓 Compte Déverrouillé</h1><p>Votre accès a été rétabli</p></div><div class=\"content\"><p>Bonjour {{name}},</p><p>Votre compte a été déverrouillé par un administrateur.</p><div class=\"success-box\"><h3>✅ Détails du déverrouillage</h3><p><strong>Déverrouillé par :</strong> {{adminEmail}}</p><p><strong>Date :</strong> {{unlockDate}}</p><p>Vous pouvez maintenant vous connecter normalement à votre compte.</p></div><p>Pour votre sécurité, nous vous recommandons de :</p><ul><li>Vous connecter et vérifier l'activité de votre compte</li><li>Changer votre mot de passe si nécessaire</li><li>Activer l'authentification à deux facteurs si disponible</li></ul><p style=\"text-align: center;\"><a href=\"{{loginUrl}}\" class=\"button\">Se connecter maintenant</a></p><p>Si vous avez des questions, n'hésitez pas à contacter notre support.</p><p>Cordialement,<br>L'équipe Support</p></div><div class=\"footer\"><p>Cet email confirme le déverrouillage de votre compte.</p><p>© 2024 Votre Entreprise. Tous droits réservés.</p></div></div></body></html>",
+  "smsTemplate": null,
+  "pushTemplate": null,
+  "webTemplate": null,
+  "variables": ["name", "adminEmail", "unlockDate", "loginUrl"],
+  "isActive": true
+}

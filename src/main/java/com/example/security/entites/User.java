@@ -97,10 +97,9 @@ public class User implements UserDetails {
     private String lastLoginIp;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by_admin")
+    @JoinColumn(name = "created_by_admin", nullable = true)
     @JsonIgnore
     private User createdByAdmin;
-
 
     // NOUVEAUX CHAMPS pour OAuth2
     @Column(name = "google_id")

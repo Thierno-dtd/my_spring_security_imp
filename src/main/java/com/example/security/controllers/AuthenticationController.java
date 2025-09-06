@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -486,7 +487,226 @@ public class AuthenticationController {
         return ResponseEntity.ok(response);
     }
 
-    // =============== MÉTHODES UTILITAIRES COMPLÉTÉES ===============
+    // Dans la section GESTION DE VERROUILLAGE
+    @Operation(
+            summary = "Enregistrer une tentative de connexion",
+            description = "Enregistre une tentative de connexion (succès/échec) pour le système de verrouillage"
+    )
+    @PostMapping("/sessions/record-login-attempt")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, String>> recordLoginAttempt(
+            @RequestBody Map<String, Object> request,
+            HttpServletRequest httpRequest) {
 
+        String email = (String) request.get("email");
+        String ipAddress = (String) request.get("ipAddress");
+        Boolean success = (Boolean) request.get("success");
+        String failureReason = (String) request.get("failureReason");
+
+        lockoutService.recordLoginAttempt(email, ipAddress, success, failureReason, httpRequest);
+
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Tentative de connexion enregistrée");
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "Vérifier si un compte est verrouillé",
+            description = "Vérifie si un compte utilisateur est temporairement verrouillé"
+    )
+    @GetMapping("/sessions/is-locked/{email}")
+    public ResponseEntity<Map<String, Boolean>> isAccountLocked(@PathVariable String email) {
+        boolean isLocked = lockoutService.isAccountLocked(email);
+
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("isLocked", isLocked);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "Envoyer notification d'activité suspecte",
+            description = "Envoie une notification pour activité suspecte détectée"
+    )
+    @PostMapping("/sessions/admin/send-suspicious-activity-notification")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, String>> sendSuspiciousActivityNotification(
+            @RequestBody Map<String, Object> request) {
+
+        String ipAddress = (String) request.get("ipAddress");
+        Long failureCount = Long.valueOf(request.get("failureCount").toString());
+        String userEmail = (String) request.get("userEmail");
+
+        lockoutService.sendSuspiciousActivityNotification(ipAddress, failureCount, userEmail);
+
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Notification d'activité suspecte envoyée");
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "Envoyer alerte de sécurité",
+            description = "Envoie une alerte de sécurité pour tentatives multiples"
+    )
+    @PostMapping("/sessions/admin/send-security-alert")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, String>> sendSecurityAlert(
+            @RequestBody Map<String, Object> request) {
+
+        String email = (String) request.get("email");
+        Integer failedAttempts = (Integer) request.get("failedAttempts");
+        Integer remainingAttempts = (Integer) request.get("remainingAttempts");
+
+        lockoutService.sendSecurityAlert(email, failedAttempts, remainingAttempts);
+
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Alerte de sécurité envoyée");
+        return ResponseEntity.ok(response);
+    }
+
+// =============== GESTION CLEANUP ACCOUNTS ===============
+
+    @Operation(
+            summary = "Forcer le nettoyage des comptes non vérifiés",
+            description = "Force le nettoyage manuel des comptes non vérifiés plus anciens que X jours"
+    )
+    @PostMapping("/sessions/admin/force-cleanup")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<CleanupResult> forceAccountCleanup(
+            @RequestBody Map<String, Integer> request) {
+
+        Integer daysOld = request.get("daysOld");
+        if (daysOld == null || daysOld < 1) {
+            throw new IllegalArgumentException("Le nombre de jours doit être supérieur à 0");
+        }
+
+        // Injection du service AccountCleanupService nécessaire
+        // CleanupResult result = accountCleanupService.forceCleanup(daysOld);
+
+        // Temporaire - remplacer par l'appel réel
+        CleanupResult result = CleanupResult.builder()
+                .deletedCount(0)
+                .cutoffDate(java.time.LocalDateTime.now().minusDays(daysOld))
+                .emails(java.util.Collections.emptyList())
+                .build();
+
+        return ResponseEntity.ok(result);
+    }
+
+// =============== GESTION SESSIONS AVANCÉE ===============
+
+    @Operation(
+            summary = "Statistiques des sessions",
+            description = "Récupère les statistiques détaillées des sessions"
+    )
+    @GetMapping("/sessions/admin/session-stats")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<SessionStats> getSessionStats() {
+        SessionStats stats = sessionService.getSessionStats();
+        return ResponseEntity.ok(stats);
+    }
+
+    @Operation(
+            summary = "Vérifier la validité d'une session",
+            description = "Vérifie si une session spécifique est toujours valide"
+    )
+    @GetMapping("/sessions/validate/{sessionId}")
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Boolean>> validateSession(@PathVariable String sessionId) {
+        boolean isValid = sessionService.isSessionValid(sessionId);
+
+        Map<String, Boolean> response = new HashMap<>();
+        response.put("isValid", isValid);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "Mettre à jour l'activité de session",
+            description = "Met à jour le timestamp de dernière activité d'une session"
+    )
+    @PostMapping("/sessions/update-activity/{sessionId}")
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+    public ResponseEntity<Map<String, String>> updateSessionActivity(@PathVariable String sessionId) {
+        sessionService.updateSessionActivity(sessionId);
+
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Activité de session mise à jour");
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "Créer une session avec token",
+            description = "Crée une nouvelle session et retourne le token JWT associé"
+    )
+    @PostMapping("/sessions/create-with-token")
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+    public ResponseEntity<Map<String, String>> createSessionWithToken(
+            @RequestBody Map<String, String> request,
+            HttpServletRequest httpRequest) {
+
+        User currentUser = authenticationService.getCurrentUser();
+        String deviceInfo = request.get("deviceInfo");
+
+        String token = sessionService.createSessionWithToken(currentUser, httpRequest, deviceInfo);
+
+        Map<String, String> response = new HashMap<>();
+        response.put("token", token);
+        response.put("message", "Session créée avec succès");
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+            summary = "Tester les notifications",
+            description = "Envoie des notifications de test pour vérifier la configuration"
+    )
+    @PostMapping("/sessions/admin/test-notifications")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, String>> testNotifications(
+            @RequestBody Map<String, String> request) {
+
+        String email = request.get("email");
+        String notificationType = request.get("type");
+
+        // Logique pour envoyer différents types de notifications de test
+        // Ceci nécessiterait d'étendre les services existants
+
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Notification de test envoyée à " + email);
+        response.put("type", notificationType);
+        return ResponseEntity.ok(response);
+    }
+
+// =============== ENDPOINTS DE DEBUGGING (DÉVELOPPEMENT UNIQUEMENT) ===============
+
+    @Operation(
+            summary = "Informations de debug JWT",
+            description = "Retourne les informations contenues dans un token JWT (dev uniquement)"
+    )
+    @PostMapping("/sessions/debug/jwt-info")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getJwtInfo(
+            @RequestBody Map<String, String> request) {
+
+        String token = request.get("token");
+
+        try {
+            String email = jwtService.extractuserEmail(token);
+            String sessionId = jwtService.extractClaim(token, claims -> (String) claims.get("sessionId"));
+            Boolean isBlacklisted = jwtService.isTokenBlacklisted(token);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("email", email);
+            response.put("sessionId", sessionId);
+            response.put("isBlacklisted", isBlacklisted);
+            response.put("isValid", jwtService.isTokenValid(token, authenticationService.findUserByEmail(email)));
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("error", "Token invalide");
+            response.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
 
 }

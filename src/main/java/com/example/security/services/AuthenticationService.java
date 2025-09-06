@@ -40,17 +40,15 @@ import java.util.stream.Collectors;
 @Slf4j
 public class AuthenticationService {
 
-    private final SessionService sessionService;
-    private final LoginAttemptRepository loginAttemptRepository;
     @Value("${jwt.expiration}")
     private String jwtExpiration;
-
     @Value("${jwt.token-type}")
     private String tokenType;
-
     @Value("${email.verification.expiration:24}")
     private int emailVerificationExpirationHours;
 
+    private final SessionService sessionService;
+    private final LoginAttemptRepository loginAttemptRepository;
     private final UserRepository utilisateurRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -94,6 +92,7 @@ public class AuthenticationService {
                     .pname(dataEncryption.encryptSensitiveData(request.getPname()))
                     .email(request.getEmail())
                     .passwd(passwordEncoder.encode(request.getPasswd()))
+                    .createdByAdmin(getCurrentUser())
                     .roles(TypeRoles.USER)
                     .emailVerified(false)
                     .emailVerificationToken(verificationToken)
@@ -153,6 +152,7 @@ public class AuthenticationService {
                     .pname(dataEncryption.encryptSensitiveData(request.getPname()))
                     .email(request.getEmail())
                     .passwd(passwordEncoder.encode(request.getPasswd()))
+                    .createdByAdmin(getCurrentUser())
                     .roles(TypeRoles.ADMIN)
                     .build();
 
@@ -209,6 +209,7 @@ public class AuthenticationService {
 
         if (user.getEmailVerified()) {
             throw new IllegalArgumentException("Email déjà vérifié");
+
         }
 
         // Générer un nouveau token

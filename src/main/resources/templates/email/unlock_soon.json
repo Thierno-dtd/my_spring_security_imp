@@ -1,0 +1,13 @@
+{
+    "id": "unlock_soon",
+    "name": "Déverrouillage imminent",
+    "description": "Notification envoyée quelques minutes avant le déverrouillage automatique",
+    "type": "SECURITY",
+    "emailSubject": "ℹ️ Votre compte sera bientôt déverrouillé",
+    "emailTemplate": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Déverrouillage Imminent</title><style>body{font-family:Arial,sans-serif;margin:0;padding:0;background-color:#f4f4f4}.container{max-width:600px;margin:0 auto;background-color:white;padding:0}.header{background-color:#17a2b8;color:white;padding:20px;text-align:center}.content{padding:30px}.info{background-color:#d1ecf1;border:1px solid #bee5eb;color:#0c5460;padding:15px;border-radius:5px;margin:20px 0}.footer{background-color:#f8f9fa;padding:20px;text-align:center;font-size:12px;color:#6c757d}</style></head><body><div class=\"container\"><div class=\"header\"><h1>ℹ️ Déverrouillage Imminent</h1><p>Votre compte sera bientôt accessible</p></div><div class=\"content\"><p>Bonjour {{name}},</p><div class=\"info\"><p><strong>Information :</strong> Votre compte sera automatiquement déverrouillé dans {{minutesRemaining}} minutes.</p></div><p>Vous pourrez alors vous reconnecter normalement.</p><p><strong>Conseils pour éviter un futur verrouillage :</strong></p><ul><li>Vérifiez bien votre mot de passe avant de le saisir</li><li>Assurez-vous que la touche Maj n'est pas activée</li><li>Utilisez un gestionnaire de mots de passe</li><li>Contactez le support si vous avez oublié vos identifiants</li></ul><p>Merci de votre patience.</p><p>L'équipe Support</p></div><div class=\"footer\"><p>Ce message est envoyé automatiquement pour vous informer.</p><p>© 2024 Votre Entreprise. Tous droits réservés.</p></div></div></body></html>",
+    "smsTemplate": null,
+    "pushTemplate": null,
+    "webTemplate": null,
+    "variables": ["name", "minutesRemaining"],
+    "isActive": true
+}

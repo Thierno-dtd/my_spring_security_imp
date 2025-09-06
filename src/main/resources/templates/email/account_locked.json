@@ -1,0 +1,13 @@
+{
+  "id": "account_locked",
+  "name": "Compte verrouillé",
+  "description": "Template pour notifier un verrouillage de compte après tentatives échouées",
+  "type": "SECURITY",
+  "emailSubject": "🔒 Votre compte a été temporairement verrouillé",
+  "emailTemplate": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Compte Verrouillé</title><style>body{font-family:Arial,sans-serif;margin:0;padding:0;background-color:#f4f4f4}.container{max-width:600px;margin:0 auto;background-color:white;padding:0}.header{background-color:#dc3545;color:white;padding:20px;text-align:center}.content{padding:30px}.warning-box{background-color:#fff3cd;border:1px solid #ffeaa7;padding:15px;border-radius:5px;margin:20px 0}.info-box{background-color:#d1ecf1;border:1px solid #bee5eb;padding:15px;border-radius:5px;margin:20px 0}.footer{background-color:#f8f9fa;padding:20px;text-align:center;font-size:12px;color:#6c757d}</style></head><body><div class=\"container\"><div class=\"header\"><h1>🔒 Compte Verrouillé</h1><p>Sécurité de votre compte</p></div><div class=\"content\"><p>Bonjour {{name}},</p><p>Votre compte a été temporairement verrouillé suite à plusieurs tentatives de connexion échouées.</p><div class=\"warning-box\"><h3>⚠️ Détails du verrouillage</h3><p><strong>Durée :</strong> {{lockoutDuration}} minutes</p><p><strong>Raison :</strong> Trop de tentatives de connexion incorrectes</p><p><strong>Votre compte sera automatiquement déverrouillé dans {{lockoutDuration}} minutes.</strong></p></div><div class=\"info-box\"><h3>🛡️ Conseils de sécurité</h3><ul><li>Vérifiez que vous utilisez le bon mot de passe</li><li>Si vous avez oublié votre mot de passe, utilisez la fonction de récupération</li><li>Si ce n'était pas vous, changez votre mot de passe immédiatement après déverrouillage</li></ul></div><p>Si vous pensez que votre compte a été compromis, contactez immédiatement notre support.</p><p>Cordialement,<br>L'équipe Sécurité</p></div><div class=\"footer\"><p>Cet email a été envoyé automatiquement suite à un événement de sécurité.</p><p>© 2024 Votre Entreprise. Tous droits réservés.</p></div></div></body></html>",
+  "smsTemplate": null,
+  "pushTemplate": null,
+  "webTemplate": null,
+  "variables": ["name", "lockoutDuration"],
+  "isActive": true
+}

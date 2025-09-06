@@ -18,6 +18,9 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
 
+    /**
+     * Trouve les utilisateurs par token de vérification email
+     */
     Optional<User> findByEmailVerificationToken(String token);
 
     @Query("SELECT u FROM User u WHERE u.emailVerificationExpiresAt < :now AND u.emailVerified = false")
@@ -78,8 +81,25 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT COUNT(u) FROM User u WHERE u.lastSuccessfulLogin < :cutoffDate")
     long countInactiveUsers(@Param("cutoffDate") LocalDateTime cutoffDate);
 
+    /**
+     * Recherche utilisateurs par email ou nom (pour pagination)
+     */
     @Query("SELECT u FROM User u WHERE u.email LIKE %:search% OR u.name LIKE %:search% ORDER BY u.createdAt DESC")
     Page<User> findByEmailContainingOrNameContainingIgnoreCase(@Param("search") String search,
                                                                @Param("search") String search2,
                                                                Pageable pageable);
+
+    /**
+     * Compte les comptes verrouillés depuis une date donnée
+     */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.lockedUntil IS NOT NULL AND u.updatedAt >= :since")
+    long countLockedAccountsSince(@Param("since") LocalDateTime since);
+
+    /**
+     * Trouve les utilisateurs qui seront déverrouillés bientôt
+     */
+    @Query("SELECT u FROM User u WHERE u.lockedUntil IS NOT NULL AND u.lockedUntil BETWEEN :startTime AND :endTime")
+    List<User> findUsersUnlockingSoon(@Param("startTime") LocalDateTime startTime,
+                                      @Param("endTime") LocalDateTime endTime);
+
 }
