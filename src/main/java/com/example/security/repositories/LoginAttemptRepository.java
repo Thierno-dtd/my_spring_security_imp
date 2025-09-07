@@ -105,4 +105,16 @@ public interface LoginAttemptRepository extends JpaRepository<LoginAttempt, Long
             "ORDER BY COUNT(la) DESC")
     List<Object[]> findAttackPatterns(@Param("since") LocalDateTime since,
                                       @Param("minAttempts") int minAttempts);
+
+    /**
+     * Récupère les emails distincts qui se sont connectés depuis une IP donnée
+     * à partir d'une date précise.
+     */
+    @Query("SELECT DISTINCT la.email " +
+            "FROM LoginAttempt la " +
+            "WHERE la.ipAddress = :ipAddress " +
+            "AND la.attemptTime >= :since")
+    List<String> findDistinctEmailsByIpAndSince(@Param("ipAddress") String ipAddress,
+                                                @Param("since") LocalDateTime since);
+
 }

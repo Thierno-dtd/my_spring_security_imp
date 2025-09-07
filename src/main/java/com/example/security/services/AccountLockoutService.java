@@ -80,54 +80,84 @@ public class AccountLockoutService {
         User user = userRepository.findByEmail(email).orElse(null);
 
         if (user != null) {
-            // Incrémenter le compteur d'échecs
+            int previousFailedAttempts = user.getFailedLoginAttempts() != null ? user.getFailedLoginAttempts() : 0;
             user.incrementFailedLoginAttempts();
+            int currentFailedAttempts = user.getFailedLoginAttempts();
+
+            // AUDIT: Chaque tentative échouée
+            auditMicroserviceClient.logSecurityEvent(
+                    "FAILED_LOGIN_ATTEMPT",
+                    user.getEmail(),
+                    "MEDIUM",
+                    String.format("Tentative %d/%d depuis IP: %s", currentFailedAttempts, maxFailedAttempts, ipAddress),
+                    request
+            );
 
             // Calculer la durée de verrouillage (progressive ou fixe)
-            int lockoutDuration = calculateLockoutDuration(user.getFailedLoginAttempts());
+            int lockoutDuration = calculateLockoutDuration(currentFailedAttempts);
 
             // Verrouiller si nécessaire
-            if (user.getFailedLoginAttempts() >= maxFailedAttempts) {
+            if (currentFailedAttempts >= maxFailedAttempts) {
+                LocalDateTime previousLockUntil = user.getLockedUntil();
                 user.lockTemporarily(lockoutDuration);
                 userRepository.save(user);
 
-                // Notification de sécurité
-                sendAccountLockedNotification(user, lockoutDuration);
-
-                // Audit critique
+                // AUDIT: Verrouillage avec détails de progression
                 auditMicroserviceClient.logSecurityEvent(
                         "ACCOUNT_LOCKED_FAILED_ATTEMPTS",
                         user.getEmail(),
                         "HIGH",
-                        "Compte verrouillé après " + user.getFailedLoginAttempts() + " tentatives échouées",
+                        String.format("Compte verrouillé après %d tentatives. Durée: %d min. IP: %s. Progression: %s",
+                                currentFailedAttempts, lockoutDuration, ipAddress,
+                                progressiveLockoutEnabled ? "progressive" : "fixe"),
                         request
                 );
 
+                // AUDIT: Si c'est un re-verrouillage
+                if (previousLockUntil != null && previousLockUntil.isAfter(LocalDateTime.now())) {
+                    auditMicroserviceClient.logSecurityEvent(
+                            "ACCOUNT_RE_LOCKED",
+                            user.getEmail(),
+                            "CRITICAL",
+                            "Compte reverrouillé alors qu'il était déjà verrouillé jusqu'à: " + previousLockUntil,
+                            request
+                    );
+                }
+
+                // Notification de sécurité
+                sendAccountLockedNotification(user, lockoutDuration);
                 log.warn("🔒 Compte verrouillé pour {} tentatives: {} (durée: {}min)",
-                        user.getEmail(), user.getFailedLoginAttempts(), lockoutDuration);
+                        user.getEmail(), currentFailedAttempts, lockoutDuration);
 
             } else {
                 userRepository.save(user);
 
-                // Avertissement avant verrouillage
-                int remainingAttempts = maxFailedAttempts - user.getFailedLoginAttempts();
+                int remainingAttempts = maxFailedAttempts - currentFailedAttempts;
+
+                // AUDIT: Progression vers verrouillage
                 auditMicroserviceClient.logSecurityEvent(
-                        "MULTIPLE_FAILED_LOGIN_ATTEMPTS",
+                        "ACCOUNT_LOCKOUT_WARNING",
                         user.getEmail(),
                         "MEDIUM",
-                        "Tentatives échouées: " + user.getFailedLoginAttempts() +
-                                " (reste " + remainingAttempts + " avant verrouillage)",
+                        String.format("Tentatives échouées: %d/%d. Reste %d avant verrouillage. IP: %s",
+                                currentFailedAttempts, maxFailedAttempts, remainingAttempts, ipAddress),
                         request
                 );
 
+                // Envoyer alerte si seuil critique atteint
+                if (currentFailedAttempts >= 3) {
+                    sendSecurityAlert(email, currentFailedAttempts, remainingAttempts);
+                }
+
                 log.warn("⚠️ Tentatives échouées pour {}: {} (reste {})",
-                        user.getEmail(), user.getFailedLoginAttempts(), remainingAttempts);
+                        user.getEmail(), currentFailedAttempts, remainingAttempts);
             }
         }
 
-        // Vérifier les tentatives par IP
-        checkIpBasedLockout(ipAddress, request);
+        // Vérifier les tentatives par IP avec audit détaillé
+        checkIpBasedLockoutWithAudit(ipAddress, request);
     }
+
 
     /**
      * Traite une connexion réussie
@@ -185,26 +215,50 @@ public class AccountLockoutService {
         User user = userRepository.findByEmail(email).orElse(null);
 
         if (user == null) {
+            // AUDIT: Tentative de déverrouillage d'un compte inexistant
+            auditMicroserviceClient.logSecurityEvent(
+                    "UNLOCK_ATTEMPT_UNKNOWN_USER",
+                    adminEmail,
+                    "MEDIUM",
+                    "Tentative de déverrouillage d'un compte inexistant: " + email,
+                    null
+            );
             return false;
         }
+
+        // AUDIT: État avant déverrouillage
+        boolean wasLocked = user.isTemporarilyLocked();
+        int failedAttemptsBeforeReset = user.getFailedLoginAttempts() != null ? user.getFailedLoginAttempts() : 0;
+        LocalDateTime lockUntilBefore = user.getLockedUntil();
 
         user.setFailedLoginAttempts(0);
         user.setLockedUntil(null);
         userRepository.save(user);
 
-        // Audit
+        // AUDIT: Déverrouillage avec détails complets
         auditMicroserviceClient.logAuditEvent(
                 "ACCOUNT_UNLOCKED_MANUALLY",
                 user.getEmail(),
-                "Compte déverrouillé manuellement par " + adminEmail + ". Raison: " + reason,
+                String.format("Déverrouillage manuel par %s. État précédent: locked=%s, attempts=%d, lockedUntil=%s. Raison: %s",
+                        adminEmail, wasLocked, failedAttemptsBeforeReset, lockUntilBefore, reason),
                 null,
                 0L
+        );
+
+        // AUDIT: Sécurité critique pour actions admin
+        auditMicroserviceClient.logSecurityEvent(
+                "ADMIN_ACCOUNT_UNLOCK",
+                adminEmail,
+                "HIGH",
+                String.format("Déverrouillage administrateur du compte %s. Raison: %s", user.getEmail(), reason),
+                null
         );
 
         // Notification à l'utilisateur
         sendAccountUnlockedNotification(user, adminEmail);
 
-        log.info("🔓 Compte déverrouillé manuellement: {} par {}", email, adminEmail);
+        log.info("🔓 Compte déverrouillé manuellement: {} par {} (était locked: {}, attempts: {})",
+                email, adminEmail, wasLocked, failedAttemptsBeforeReset);
         return true;
     }
 
@@ -219,23 +273,44 @@ public class AccountLockoutService {
             List<User> usersToUnlock = userRepository.findUsersToUnlock(now);
 
             for (User user : usersToUnlock) {
+                LocalDateTime wasLockedUntil = user.getLockedUntil();
                 user.setLockedUntil(null);
                 userRepository.save(user);
 
+                // AUDIT: Chaque déverrouillage automatique avec durée
+                long lockDurationMinutes = java.time.Duration.between(user.getLastLoginAttempt(), now).toMinutes();
                 auditMicroserviceClient.logAuditEvent(
                         "ACCOUNT_UNLOCKED_AUTOMATICALLY",
                         user.getEmail(),
-                        "Déverrouillage automatique après expiration",
+                        String.format("Déverrouillage automatique après %d minutes (était locked jusqu'à: %s)",
+                                lockDurationMinutes, wasLockedUntil),
                         null,
                         0L
                 );
             }
 
             if (!usersToUnlock.isEmpty()) {
+                // AUDIT: Statistiques de nettoyage
+                auditMicroserviceClient.logAuditEvent(
+                        "LOCKOUT_CLEANUP_COMPLETED",
+                        "system",
+                        String.format("Nettoyage terminé: %d comptes déverrouillés automatiquement", usersToUnlock.size()),
+                        null,
+                        0L
+                );
+
                 log.info("🔓 {} comptes déverrouillés automatiquement", usersToUnlock.size());
             }
 
         } catch (Exception e) {
+            // AUDIT: Erreurs de nettoyage
+            auditMicroserviceClient.logSecurityEvent(
+                    "LOCKOUT_CLEANUP_ERROR",
+                    "system",
+                    "MEDIUM",
+                    "Erreur lors du nettoyage des verrouillages: " + e.getMessage(),
+                    null
+            );
             log.error("❌ Erreur lors du nettoyage des verrouillages expirés", e);
         }
     }
@@ -457,4 +532,67 @@ public class AccountLockoutService {
         return suspiciousIps.size();
     }
 
+    private void checkIpBasedLockoutWithAudit(String ipAddress, HttpServletRequest request) {
+        LocalDateTime since = LocalDateTime.now().minusMinutes(lockoutWindowMinutes);
+        long recentFailures = loginAttemptRepository.countFailedAttemptsByIpSince(ipAddress, since);
+
+        // AUDIT: Suivi des tentatives par IP
+        if (recentFailures > 0) {
+            auditMicroserviceClient.logAuditEvent(
+                    "IP_LOGIN_ATTEMPTS_TRACKED",
+                    "system",
+                    String.format("IP %s: %d tentatives en %d minutes", ipAddress, recentFailures, lockoutWindowMinutes),
+                    request,
+                    0L
+            );
+        }
+
+        // Seuils d'alerte progressifs
+        if (recentFailures >= maxIpAttempts) {
+            auditMicroserviceClient.logSecurityEvent(
+                    "SUSPICIOUS_IP_ACTIVITY_CRITICAL",
+                    "system",
+                    "CRITICAL",
+                    String.format("IP suspecte CRITIQUE: %s (%d échecs en %d minutes)",
+                            ipAddress, recentFailures, lockoutWindowMinutes),
+                    request
+            );
+
+            // Récupérer les emails concernés pour notification
+            List<String> affectedEmails = getEmailsFromIpAttempts(ipAddress, since);
+            for (String email : affectedEmails) {
+                sendSuspiciousActivityNotification(ipAddress, recentFailures, email);
+            }
+
+            log.error("🚨 CRITIQUE: Activité suspecte IP: {} ({} échecs)", ipAddress, recentFailures);
+
+        } else if (recentFailures >= (maxIpAttempts * 0.7)) { // 70% du seuil
+            auditMicroserviceClient.logSecurityEvent(
+                    "SUSPICIOUS_IP_ACTIVITY_HIGH",
+                    "system",
+                    "HIGH",
+                    String.format("IP suspecte ÉLEVÉE: %s (%d échecs en %d minutes, seuil à %d)",
+                            ipAddress, recentFailures, lockoutWindowMinutes, maxIpAttempts),
+                    request
+            );
+
+            log.warn("⚠️ ÉLEVÉ: Activité suspecte IP: {} ({} échecs)", ipAddress, recentFailures);
+
+        } else if (recentFailures >= (maxIpAttempts * 0.4)) { // 40% du seuil
+            auditMicroserviceClient.logSecurityEvent(
+                    "SUSPICIOUS_IP_ACTIVITY_MEDIUM",
+                    "system",
+                    "MEDIUM",
+                    String.format("IP suspecte MODÉRÉE: %s (%d échecs en %d minutes)",
+                            ipAddress, recentFailures, lockoutWindowMinutes),
+                    request
+            );
+        }
+    }
+
+    private List<String> getEmailsFromIpAttempts(String ipAddress, LocalDateTime since) {
+        // Cette méthode nécessiterait une requête dans LoginAttemptRepository
+        // public List<String> findDistinctEmailsByIpAndSince(String ipAddress, LocalDateTime since);
+        return loginAttemptRepository.findDistinctEmailsByIpAndSince(ipAddress, since);
+    }
 }

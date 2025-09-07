@@ -13,14 +13,13 @@ import com.example.security.repositories.UserRepository;
 import com.example.security.module.auditsLogs.AuditMicroserviceClient;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -38,6 +37,7 @@ import java.util.stream.Collectors;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class AuthenticationService {
 
     @Value("${jwt.expiration}")
@@ -55,18 +55,7 @@ public class AuthenticationService {
     private final AuditMicroserviceClient auditMicroserviceClient;
     private final NotificationClient notificationClient;
     private final DataEncryption dataEncryption;
-
-    @Autowired
-    public AuthenticationService(UserRepository utilisateurRepository, PasswordEncoder passwordEncoder, JwtService jwtService, AuthenticationManager authenticationManager, AuditMicroserviceClient auditMicroserviceClient, NotificationClient notificationClient, DataEncryption dataEncryption, SessionService sessionService, LoginAttemptRepository loginAttemptRepository) {
-        this.utilisateurRepository = utilisateurRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.jwtService = jwtService;
-        this.auditMicroserviceClient = auditMicroserviceClient;
-        this.notificationClient = notificationClient;
-        this.dataEncryption = dataEncryption;
-        this.sessionService = sessionService;
-        this.loginAttemptRepository = loginAttemptRepository;
-    }
+    private final AccountLockoutService accountLockoutService;
 
     /**
      * Étape 1: Inscription avec envoi d'email de vérification
@@ -74,19 +63,52 @@ public class AuthenticationService {
     public RegisterResponse register(RegisterRequest request) {
         long startTime = System.currentTimeMillis();
         HttpServletRequest httpRequest = getCurrentHttpRequest();
+        String clientIp = extractClientIp(httpRequest);
 
         try {
+            // AUDIT: Début de processus d'inscription
+            auditMicroserviceClient.logAuditEvent(
+                    "USER_REGISTRATION_STARTED",
+                    request.getEmail(),
+                    "Début processus inscription depuis IP: " + clientIp,
+                    httpRequest,
+                    0L
+            );
+
             // Vérifier si l'email existe déjà
-            if (utilisateurRepository.findByEmail(request.getEmail()).isPresent()) {
+            Optional<User> existingUser = utilisateurRepository.findByEmail(request.getEmail());
+            if (existingUser.isPresent()) {
+                User existing = existingUser.get();
+
+                // AUDIT: Tentative de réinscription
+                auditMicroserviceClient.logSecurityEvent(
+                        "DUPLICATE_REGISTRATION_ATTEMPT",
+                        request.getEmail(),
+                        "MEDIUM",
+                        String.format("Tentative réinscription. Compte existant: status=%s, verified=%s, created=%s",
+                                existing.getAccountStatus(), existing.getEmailVerified(), existing.getCreatedAt()),
+                        httpRequest
+                );
+
                 throw new IllegalArgumentException("Un compte avec cet email existe déjà");
             }
 
+            // Validation de l'email
+            /*if (!isValidEmailDomain(request.getEmail())) {
+                auditMicroserviceClient.logSecurityEvent(
+                        "REGISTRATION_INVALID_EMAIL_DOMAIN",
+                        request.getEmail(),
+                        "LOW",
+                        "Tentative inscription avec domaine email invalide ou suspect",
+                        httpRequest
+                );
+            }*/
+
             // Générer le token de vérification
             String verificationToken = generateVerificationToken();
-
             LocalDateTime expiresAt = LocalDateTime.now().plusHours(emailVerificationExpirationHours);
 
-            // Créer l'utilisateur en attente de vérification
+            // Créer l'utilisateur
             var user = User.builder()
                     .name(dataEncryption.encryptSensitiveData(request.getName()))
                     .pname(dataEncryption.encryptSensitiveData(request.getPname()))
@@ -98,28 +120,50 @@ public class AuthenticationService {
                     .emailVerificationToken(verificationToken)
                     .emailVerificationExpiresAt(expiresAt)
                     .accountStatus(AccountStatus.PENDING_VERIFICATION)
+                    .lastLoginIp(clientIp)
                     .build();
 
             utilisateurRepository.save(user);
 
-            // Envoyer l'email de vérification
-            notificationClient.sendEmailVerification(
-                    request.getEmail(),
-                    request.getName(),
-                    verificationToken
-            );
-
-            // AUDIT
+            // AUDIT: Utilisateur créé avec succès
             long executionTime = System.currentTimeMillis() - startTime;
             auditMicroserviceClient.logAuditEvent(
-                    "USER_REGISTRATION_PENDING",
+                    "USER_CREATED_PENDING_VERIFICATION",
                     request.getEmail(),
-                    "Inscription en attente de vérification email",
+                    String.format("Utilisateur créé. IP: %s, expires: %s", clientIp, expiresAt),
                     httpRequest,
                     executionTime
             );
 
-            log.info("✅ Utilisateur créé en attente de vérification: {}", request.getEmail());
+            // Envoyer l'email de vérification
+            try {
+                notificationClient.sendEmailVerification(
+                        request.getEmail(),
+                        request.getName(),
+                        verificationToken
+                );
+
+                // AUDIT: Email envoyé
+                auditMicroserviceClient.logAuditEvent(
+                        "VERIFICATION_EMAIL_SENT",
+                        request.getEmail(),
+                        "Email de vérification envoyé avec succès",
+                        httpRequest,
+                        0L
+                );
+
+            } catch (Exception emailError) {
+                // AUDIT: Erreur envoi email
+                auditMicroserviceClient.logSecurityEvent(
+                        "VERIFICATION_EMAIL_FAILED",
+                        request.getEmail(),
+                        "MEDIUM",
+                        "Échec envoi email de vérification: " + emailError.getMessage(),
+                        httpRequest
+                );
+            }
+
+            log.info("Utilisateur créé en attente de vérification: {}", request.getEmail());
 
             return RegisterResponse.builder()
                     .message("Inscription réussie! Veuillez vérifier votre email pour activer votre compte.")
@@ -129,15 +173,15 @@ public class AuthenticationService {
 
         } catch (Exception e) {
             long executionTime = System.currentTimeMillis() - startTime;
-            auditMicroserviceClient.logAuditEvent(
+            auditMicroserviceClient.logSecurityEvent(
                     "USER_REGISTRATION_FAILED",
                     request.getEmail(),
-                    "Échec d'enregistrement: " + e.getMessage(),
-                    httpRequest,
-                    executionTime
+                    "HIGH",
+                    String.format("Échec inscription depuis IP %s: %s", clientIp, e.getMessage()),
+                    httpRequest
             );
 
-            log.error("❌ Échec d'enregistrement pour: {}", request.getEmail(), e);
+            log.error("Échec d'enregistrement pour: {}", request.getEmail(), e);
             throw e;
         }
     }
@@ -314,66 +358,126 @@ public class AuthenticationService {
     public RefreshTokenRequest.AuthenticationResponse authenticate(RefreshTokenRequest.AuthenticationRequest request) {
         long startTime = System.currentTimeMillis();
         HttpServletRequest httpRequest = getCurrentHttpRequest();
+        String clientIp = extractClientIp(httpRequest);
+        String userAgent = httpRequest.getHeader("User-Agent");
 
-        log.info("🔑 Tentative de connexion pour: {}", request.getEmail());
+        // AUDIT: Début de tentative de connexion
+        auditMicroserviceClient.logAuditEvent(
+                "LOGIN_ATTEMPT_STARTED",
+                request.getEmail(),
+                String.format("Tentative connexion depuis IP: %s, UserAgent: %s", clientIp, userAgent),
+                httpRequest,
+                0L
+        );
 
         try {
             User user = (User) utilisateurRepository.findByEmail(request.getEmail())
                     .orElseThrow(() -> {
+                        // AUDIT: Utilisateur inexistant
                         auditMicroserviceClient.logSecurityEvent(
                                 "LOGIN_ATTEMPT_UNKNOWN_USER",
                                 request.getEmail(),
                                 "MEDIUM",
-                                "Tentative de connexion avec email inexistant",
+                                String.format("Tentative connexion avec email inexistant depuis IP: %s", clientIp),
                                 httpRequest
                         );
-                        return new EntityNotFoundException("Utilisateur non trouvé");
+                        return new EntityNotFoundException("Identifiants invalides");
                     });
 
-            // Vérifier si l'email est vérifié
+            // AUDIT: Utilisateur trouvé - informations de contexte
+            auditMicroserviceClient.logAuditEvent(
+                    "LOGIN_USER_IDENTIFIED",
+                    request.getEmail(),
+                    String.format("Utilisateur identifié. Status: %s, LastLogin: %s, FailedAttempts: %d",
+                            user.getAccountStatus(), user.getLastSuccessfulLogin(), user.getFailedLoginAttempts()),
+                    httpRequest,
+                    0L
+            );
+
+            // Vérifications de sécurité avec audit
             if (!user.getEmailVerified()) {
                 auditMicroserviceClient.logSecurityEvent(
                         "LOGIN_ATTEMPT_UNVERIFIED_EMAIL",
                         request.getEmail(),
                         "MEDIUM",
-                        "Tentative de connexion avec email non vérifié",
+                        "Tentative connexion avec email non vérifié",
                         httpRequest
                 );
                 throw new IllegalArgumentException("Veuillez d'abord vérifier votre email");
             }
 
-            // Vérifier le statut du compte
             if (user.getAccountStatus() != AccountStatus.ACTIVE) {
                 auditMicroserviceClient.logSecurityEvent(
                         "LOGIN_ATTEMPT_INACTIVE_ACCOUNT",
                         request.getEmail(),
                         "HIGH",
-                        "Tentative de connexion avec compte inactif: " + user.getAccountStatus(),
+                        String.format("Tentative connexion compte inactif/suspendu: %s", user.getAccountStatus()),
                         httpRequest
                 );
                 throw new IllegalArgumentException("Compte inactif ou suspendu");
             }
 
+            if (user.isTemporarilyLocked()) {
+                auditMicroserviceClient.logSecurityEvent(
+                        "LOGIN_ATTEMPT_LOCKED_ACCOUNT",
+                        request.getEmail(),
+                        "HIGH",
+                        String.format("Tentative connexion compte verrouillé jusqu'à: %s", user.getLockedUntil()),
+                        httpRequest
+                );
+                throw new IllegalArgumentException("Compte temporairement verrouillé");
+            }
+
+            // Vérification du mot de passe
             if (passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+                // SUCCÈS DE CONNEXION
                 String jwtToken = jwtService.generateToken(user);
                 String refreshToken = jwtService.generateRefreshToken(user);
-                String ip = httpRequest.getHeader("X-Forwarded-For");
-                if (ip == null) {
-                    ip = httpRequest.getRemoteAddr();
-                }
-                user.setLastLoginIp(ip);
+
+                // Mise à jour des informations de connexion
+                LocalDateTime lastLogin = user.getLastSuccessfulLogin();
+                user.setLastLoginIp(clientIp);
+                user.setLastSuccessfulLogin(LocalDateTime.now());
+                user.resetFailedLoginAttempts();
                 utilisateurRepository.save(user);
-                // AUDIT DE SUCCÈS
+
                 long executionTime = System.currentTimeMillis() - startTime;
+
+                // AUDIT: Connexion réussie avec contexte
                 auditMicroserviceClient.logAuditEvent(
                         "USER_LOGIN_SUCCESS",
                         request.getEmail(),
-                        "Connexion réussie",
+                        String.format("Connexion réussie. IP: %s, LastLogin précédent: %s, Durée: %dms",
+                                clientIp, lastLogin, executionTime),
                         httpRequest,
                         executionTime
                 );
 
-                log.info("✅ Connexion réussie pour: {}", request.getEmail());
+                // AUDIT: Détection de connexion suspecte (IP différente)
+                if (user.getLastLoginIp() != null && !user.getLastLoginIp().equals(clientIp)) {
+                    auditMicroserviceClient.logSecurityEvent(
+                            "LOGIN_FROM_NEW_IP",
+                            request.getEmail(),
+                            "MEDIUM",
+                            String.format("Connexion depuis nouvelle IP. Précédente: %s, Actuelle: %s",
+                                    user.getLastLoginIp(), clientIp),
+                            httpRequest
+                    );
+                }
+
+                // AUDIT: Détection de connexion après longue absence
+                if (lastLogin != null && lastLogin.isBefore(LocalDateTime.now().minusDays(30))) {
+                    auditMicroserviceClient.logSecurityEvent(
+                            "LOGIN_AFTER_LONG_ABSENCE",
+                            request.getEmail(),
+                            "LOW",
+                            String.format("Connexion après %d jours d'absence",
+                                    java.time.Duration.between(lastLogin, LocalDateTime.now()).toDays()),
+                            httpRequest
+                    );
+                }
+
+                log.info("Connexion réussie pour: {} depuis {}", request.getEmail(), clientIp);
 
                 return RefreshTokenRequest.AuthenticationResponse.builder()
                         .token(jwtToken)
@@ -381,29 +485,41 @@ public class AuthenticationService {
                         .expiresIn(Long.valueOf(jwtExpiration))
                         .tokenType(tokenType)
                         .build();
+
             } else {
+                // ÉCHEC - Mot de passe incorrect
+                long executionTime = System.currentTimeMillis() - startTime;
+
                 auditMicroserviceClient.logSecurityEvent(
                         "LOGIN_FAILED_WRONG_PASSWORD",
                         request.getEmail(),
                         "HIGH",
-                        "Tentative de connexion avec mot de passe incorrect",
+                        String.format("Mot de passe incorrect depuis IP: %s, UserAgent: %s",
+                                clientIp, userAgent),
                         httpRequest
                 );
 
-                log.warn("❌ Mot de passe incorrect pour: {}", request.getEmail());
+                // Enregistrer la tentative pour le service de verrouillage
+
+                accountLockoutService.recordLoginAttempt(request.getEmail(), clientIp, false, "WRONG_PASSWORD", httpRequest);
+
+                log.warn("Mot de passe incorrect pour: {} depuis {}", request.getEmail(), clientIp);
                 throw new EntityNotFoundException("Identifiants invalides");
             }
+
         } catch (Exception e) {
             long executionTime = System.currentTimeMillis() - startTime;
+
             auditMicroserviceClient.logAuditEvent(
                     "USER_LOGIN_ERROR",
                     request.getEmail(),
-                    "Erreur lors de l'authentification: " + e.getMessage(),
+                    String.format("Erreur authentification depuis IP %s après %dms: %s",
+                            clientIp, executionTime, e.getMessage()),
                     httpRequest,
                     executionTime
             );
 
-            log.error("💥 Erreur d'authentification pour: {}", request.getEmail(), e);
+            log.error("Erreur d'authentification pour: {} depuis {}", request.getEmail(), clientIp, e);
             throw e;
         }
     }
@@ -450,33 +566,55 @@ public class AuthenticationService {
         }
     }
 
+    /**
+     * Déconnexion avec audit renforcé
+     */
     public void logout(String authHeader) {
         HttpServletRequest httpRequest = getCurrentHttpRequest();
+        String clientIp = extractClientIp(httpRequest);
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
 
             try {
                 String userEmail = jwtService.extractuserEmail(token);
-                jwtService.blacklistToken(token);
+                String sessionId = extractSessionIdFromAuth(authHeader);
 
-                // AUDIT DE DÉCONNEXION
+                // AUDIT: Début de déconnexion
                 auditMicroserviceClient.logAuditEvent(
-                        "USER_LOGOUT_SUCCESS",
+                        "LOGOUT_STARTED",
                         userEmail,
-                        "Déconnexion réussie, token blacklisté",
+                        String.format("Début déconnexion depuis IP: %s, Session: %s", clientIp, sessionId),
                         httpRequest,
                         0L
                 );
 
-                log.info("👋 Utilisateur déconnecté: {}", userEmail);
+                // Blacklister le token
+                jwtService.blacklistToken(token);
+
+                // Fermer la session si elle existe
+                if (sessionId != null) {
+                    // sessionService.logoutSession(sessionId, "USER_LOGOUT");
+                }
+
+                // AUDIT: Déconnexion réussie
+                auditMicroserviceClient.logAuditEvent(
+                        "USER_LOGOUT_SUCCESS",
+                        userEmail,
+                        String.format("Déconnexion réussie. IP: %s, Token blacklisté, Session fermée: %s",
+                                clientIp, sessionId),
+                        httpRequest,
+                        0L
+                );
+
+                log.info("Utilisateur déconnecté: {} depuis {}", userEmail, clientIp);
 
             } catch (Exception e) {
                 auditMicroserviceClient.logSecurityEvent(
                         "LOGOUT_ERROR",
                         "unknown",
                         "MEDIUM",
-                        "Erreur lors de la déconnexion: " + e.getMessage(),
+                        String.format("Erreur déconnexion depuis IP %s: %s", clientIp, e.getMessage()),
                         httpRequest
                 );
                 throw e;
@@ -486,15 +624,14 @@ public class AuthenticationService {
                     "LOGOUT_INVALID_TOKEN",
                     "unknown",
                     "MEDIUM",
-                    "Tentative de déconnexion avec token invalide",
+                    String.format("Tentative déconnexion token invalide depuis IP: %s", clientIp),
                     httpRequest
             );
 
-            log.warn("⚠️ Tentative de logout avec header Authorization invalide");
+            log.warn("Tentative de logout avec header Authorization invalide depuis {}", clientIp);
             throw new IllegalArgumentException("Header Authorization invalide");
         }
     }
-
     // MÉTHODE UTILITAIRE AJOUTÉE
 
     private String generateVerificationToken() {
@@ -505,7 +642,6 @@ public class AuthenticationService {
         ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         return attributes != null ? attributes.getRequest() : null;
     }
-
 
     /**
      * Obtenir le statut d'un compte par email
@@ -748,5 +884,21 @@ public class AuthenticationService {
             }
         }
         return "unknown-session-" + System.currentTimeMillis();
+    }
+
+    public String extractClientIp(HttpServletRequest httpRequest){
+        String ip = httpRequest.getHeader("X-Forwarded-For");
+        //return ip == null ? ip: httpRequest.getRemoteAddr();
+
+        if (ip == null || ip.isBlank() || "unknown".equalsIgnoreCase(ip)) {
+            ip = httpRequest.getHeader("Proxy-Client-IP");
+        }
+        if (ip == null || ip.isBlank() || "unknown".equalsIgnoreCase(ip)) {
+            ip = httpRequest.getHeader("WL-Proxy-Client-IP");
+        }
+        if (ip == null || ip.isBlank() || "unknown".equalsIgnoreCase(ip)) {
+            ip = httpRequest.getRemoteAddr();
+        }
+        return ip;
     }
 }

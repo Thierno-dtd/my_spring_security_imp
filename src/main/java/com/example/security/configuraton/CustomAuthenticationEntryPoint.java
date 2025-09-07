@@ -1,8 +1,11 @@
 package com.example.security.configuraton;
 
+import com.example.security.module.auditsLogs.AuditMicroserviceClient;
+import com.example.security.services.AuthenticationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
@@ -15,15 +18,29 @@ import java.util.Map;
 
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class CustomAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final AuditMicroserviceClient auditClient;
+    private final AuthenticationService authenticationService;
 
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response,
                          AuthenticationException authException) throws IOException {
 
         log.warn("Accès non autorisé à: {} - {}", request.getRequestURI(), authException.getMessage());
+
+        String clientIp = authenticationService.extractClientIp(request);
+
+        auditClient.logAuditEvent(
+                "ACCESS_DENIED_UNAUTHENTICATED",
+                "anonymous",
+                "Tentative d'accès sans authentification depuis IP=" + clientIp,
+                request,
+                0L
+        );
+
 
         response.setContentType("application/json");
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
