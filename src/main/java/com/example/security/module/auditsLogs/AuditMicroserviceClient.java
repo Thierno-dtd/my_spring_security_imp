@@ -21,6 +21,15 @@ public class AuditMicroserviceClient {
     @Value("${audit.microservice.url:http://localhost:8080}")
     private String auditServiceUrl;
 
+    @Value("audit.microservice.security.url")
+    private String auditSecurityUrl;
+
+    @Value("audit.microservice.log.url")
+    private String auditlogUrl;
+
+    @Value("audit.microservice.health.url")
+    private String auditHealthUrl;
+
     private final RestTemplate restTemplate;
 
     public AuditMicroserviceClient(RestTemplate restTemplate) {
@@ -45,7 +54,7 @@ public class AuditMicroserviceClient {
             auditData.put("executionTime", executionTime);
             auditData.put("timestamp", LocalDateTime.now().toString());
 
-            sendToAuditService("/api/v1/audit/log", auditData);
+            sendToAuditService(auditlogUrl, auditData);
 
             log.debug("✅ Événement d'audit envoyé: {}", eventType);
 
@@ -71,7 +80,7 @@ public class AuditMicroserviceClient {
             securityData.put("ipAddress", extractClientIp(request));
             securityData.put("timestamp", LocalDateTime.now().toString());
 
-            sendToAuditService("/api/v1/audit/security", securityData);
+            sendToAuditService(auditSecurityUrl, securityData);
 
             log.debug("✅ Événement de sécurité envoyé: {}", securityEvent);
 
@@ -161,7 +170,7 @@ public class AuditMicroserviceClient {
      */
     public boolean isAuditServiceAvailable() {
         try {
-            String url = auditServiceUrl + "/api/v1/audit/health";
+            String url = auditServiceUrl + auditHealthUrl;
             restTemplate.getForEntity(url, String.class);
             return true;
         } catch (Exception e) {

@@ -22,11 +22,17 @@ import java.util.Set;
 @Slf4j
 public class NotificationClient {
 
-    @Value("${notification.service.url:http://localhost:9001}")
+    @Value("${notification.microservice.url}")
     private String notificationServiceUrl;
 
-    @Value("${frontend.base.url:http://localhost:9001}")
+    @Value("${frontend.base.url}")
     private String frontendbase;
+
+    @Value("notification.service.send.url")
+    private String notificationSendUrl;
+
+    @Value("notification.service.health.url")
+    private String notificationHealthUrl;
 
     private final RestTemplate restTemplate;
 
@@ -36,7 +42,7 @@ public class NotificationClient {
 
     public ResponseEntity<String> send(NotificationRequestDto request) {
         try{
-            String url = notificationServiceUrl + "/api/notifications/send";
+            String url = notificationServiceUrl + notificationSendUrl;
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -513,6 +519,17 @@ public class NotificationClient {
 
     private String generateDashboardUrl() {
         return String.format("%s/admin/dashboard", frontendbase);
+    }
+
+    public boolean isNotificationServiceAvailable() {
+        try {
+            String url = notificationServiceUrl + notificationHealthUrl;
+            restTemplate.getForEntity(url, String.class);
+            return true;
+        } catch (Exception e) {
+            log.warn("⚠️ Microservice de notification non disponible: {}", e.getMessage());
+            return false;
+        }
     }
 
     // DTOs nécessaires (copiées du module notification)

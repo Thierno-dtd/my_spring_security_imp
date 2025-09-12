@@ -1,6 +1,5 @@
 package com.example.security.configuraton;
 
-import com.example.security.services.SessionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;

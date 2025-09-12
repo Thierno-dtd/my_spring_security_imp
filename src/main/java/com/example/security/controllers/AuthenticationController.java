@@ -3,6 +3,8 @@ package com.example.security.controllers;
 import com.example.security.configuraton.JwtService;
 import com.example.security.dto.*;
 import com.example.security.entites.User;
+import com.example.security.module.auditsLogs.AuditMicroserviceClient;
+import com.example.security.module.notifications.NotificationClient;
 import com.example.security.services.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -13,8 +15,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
@@ -39,6 +39,32 @@ public class AuthenticationController {
     private final OAuth2Service oAuth2Service;
     private final SessionService sessionService;
     private final JwtService jwtService;
+    private final AuditMicroserviceClient auditMicroserviceClient;
+    private final NotificationClient notificationClient;
+
+    @Operation(
+            summary = "health of audits & logs microservices"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Microservice d'AUDITS & LOGS fonctionnel"),
+            @ApiResponse(responseCode = "401", description = "Microservice d'AUDITS & LOGS indisponible")
+    })
+    @GetMapping("/simple/audits_logs/health")
+    public  ResponseEntity<Boolean> auditsLogsHealth() {
+        return ResponseEntity.ok(auditMicroserviceClient.isAuditServiceAvailable());
+    }
+
+    @Operation(
+            summary = "health of notifications microservices"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Microservice de NOTIFICATIONS fonctionnel"),
+            @ApiResponse(responseCode = "401", description = "Microservice de NOTIFICATIONS indisponible")
+    })
+    @GetMapping("/simple/audits_los/health")
+    public  ResponseEntity<Boolean> notificationsHealth() {
+        return ResponseEntity.ok(notificationClient.isNotificationServiceAvailable());
+    }
 
     // =============== AUTHENTIFICATION DE BASE ===============
 
@@ -67,6 +93,17 @@ public class AuthenticationController {
         RegisterResponse response = authenticationService.register(request);
         return ResponseEntity.ok(response);
     }
+
+    /*@Operation(
+            summary = "Inscription utilisateur",
+            description = "Crée un nouvel utilisateur standard. Pas de vérification email requise"
+    )
+    @ApiResponse(responseCode = "200", description = "Utilisateur enregistré avec succès")
+    @PostMapping(value = "/simple/registerUser")
+    public ResponseEntity<RegisterResponse> registerUser(@Valid @RequestBody RegisterRequest request) {
+        RegisterResponse response = authenticationService.registerUserV2(request);
+        return ResponseEntity.ok(response);
+    }*/
 
     @Operation(
             summary = "Vérifier un email",
@@ -102,6 +139,16 @@ public class AuthenticationController {
     public ResponseEntity<RefreshTokenRequest.AuthenticationResponse> registerAdmin(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.ok(authenticationService.registerAdmin(request));
     }
+
+    /*@Operation(
+            summary = "Inscription administrateur",
+            description = "Crée un compte administrateur standard avec email et mot de passe. Envoie un email de vérification.."
+    )
+    @PostMapping(value = "/sessions/registerAdmin")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<RefreshTokenRequest.AuthenticationResponse> registerAdmin(@Valid @RequestBody RegisterRequest request) {
+        return ResponseEntity.ok(authenticationService.registerAdminV2(request));
+    }*/
 
     @Operation(
             summary = "Rafraîchir le token JWT",

@@ -186,6 +186,66 @@ public class AuthenticationService {
         }
     }
 
+    /**
+     * Étape 1: Inscription simple
+     */
+    public RefreshTokenRequest.AuthenticationResponse registerUserV2(RegisterRequest request) {
+        long startTime = System.currentTimeMillis();
+        HttpServletRequest httpRequest = getCurrentHttpRequest();
+
+        try {
+            var user = User.builder()
+                    .name(dataEncryption.encryptSensitiveData(request.getName()))
+                    .pname(dataEncryption.encryptSensitiveData(request.getPname()))
+                    .email(request.getEmail())
+                    .passwd(passwordEncoder.encode(request.getPasswd()))
+                    .createdByAdmin(getCurrentUser())
+                    .roles(TypeRoles.USER)
+                    .build();
+
+            utilisateurRepository.save(user);
+            var refreshToken = jwtService.generateRefreshToken(user);
+            var jwtToken = jwtService.generateToken(user);
+
+            // AUDIT CRITIQUE POUR ADMIN
+            long executionTime = System.currentTimeMillis() - startTime;
+            auditMicroserviceClient.logAuditEvent(
+                    "USER_REGISTRATION_SUCCESS",
+                    request.getEmail(),
+                    "Nouvel utilisateur enregistré",
+                    httpRequest,
+                    executionTime
+            );
+
+            auditMicroserviceClient.logSecurityEvent(
+                    "USER_ACCOUNT_CREATED",
+                    request.getEmail(),
+                    "HIGH",
+                    "Création d'un compte utilisateur",
+                    httpRequest
+            );
+
+            log.warn("🔐 USER créé: {}", request.getEmail());
+
+            return RefreshTokenRequest.AuthenticationResponse.builder()
+                    .token(jwtToken)
+                    .refreshToken(refreshToken)
+                    .expiresIn(Long.valueOf(jwtExpiration))
+                    .tokenType(tokenType)
+                    .build();
+
+        } catch (Exception e) {
+            auditMicroserviceClient.logSecurityEvent(
+                    "USER_REGISTRATION_FAILED",
+                    request.getEmail(),
+                    "CRITICAL",
+                    "Tentative de création d'admin échouée: " + e.getMessage(),
+                    httpRequest
+            );
+            throw e;
+        }
+    }
+
     public RefreshTokenRequest.AuthenticationResponse registerAdmin(RegisterRequest request) {
         long startTime = System.currentTimeMillis();
         HttpServletRequest httpRequest = getCurrentHttpRequest();
@@ -245,6 +305,135 @@ public class AuthenticationService {
     }
 
     /**
+     *  Inscription avec envoi d'email de vérification
+     */
+    public RegisterResponse registerAdminV2(RegisterRequest request) {
+        long startTime = System.currentTimeMillis();
+        HttpServletRequest httpRequest = getCurrentHttpRequest();
+        String clientIp = extractClientIp(httpRequest);
+
+        try {
+            // AUDIT: Début de processus d'inscription
+            auditMicroserviceClient.logAuditEvent(
+                    "USER_REGISTRATION_STARTED",
+                    request.getEmail(),
+                    "Début processus inscription depuis IP: " + clientIp,
+                    httpRequest,
+                    0L
+            );
+
+            // Vérifier si l'email existe déjà
+            Optional<User> existingUser = utilisateurRepository.findByEmail(request.getEmail());
+            if (existingUser.isPresent()) {
+                User existing = existingUser.get();
+
+                // AUDIT: Tentative de réinscription
+                auditMicroserviceClient.logSecurityEvent(
+                        "DUPLICATE_REGISTRATION_ATTEMPT",
+                        request.getEmail(),
+                        "MEDIUM",
+                        String.format("Tentative réinscription. Compte existant: status=%s, verified=%s, created=%s",
+                                existing.getAccountStatus(), existing.getEmailVerified(), existing.getCreatedAt()),
+                        httpRequest
+                );
+
+                throw new IllegalArgumentException("Un compte avec cet email existe déjà");
+            }
+
+            // Validation de l'email
+            /*if (!isValidEmailDomain(request.getEmail())) {
+                auditMicroserviceClient.logSecurityEvent(
+                        "REGISTRATION_INVALID_EMAIL_DOMAIN",
+                        request.getEmail(),
+                        "LOW",
+                        "Tentative inscription avec domaine email invalide ou suspect",
+                        httpRequest
+                );
+            }*/
+
+            // Générer le token de vérification
+            String verificationToken = generateVerificationToken();
+            LocalDateTime expiresAt = LocalDateTime.now().plusHours(emailVerificationExpirationHours);
+
+            // Créer l'utilisateur
+            var user = User.builder()
+                    .name(dataEncryption.encryptSensitiveData(request.getName()))
+                    .pname(dataEncryption.encryptSensitiveData(request.getPname()))
+                    .email(request.getEmail())
+                    .passwd(passwordEncoder.encode(request.getPasswd()))
+                    .createdByAdmin(getCurrentUser())
+                    .roles(TypeRoles.ADMIN)
+                    .emailVerified(false)
+                    .emailVerificationToken(verificationToken)
+                    .emailVerificationExpiresAt(expiresAt)
+                    .accountStatus(AccountStatus.PENDING_VERIFICATION)
+                    .lastLoginIp(clientIp)
+                    .build();
+
+            utilisateurRepository.save(user);
+
+            // AUDIT: Utilisateur créé avec succès
+            long executionTime = System.currentTimeMillis() - startTime;
+            auditMicroserviceClient.logAuditEvent(
+                    "USER_CREATED_PENDING_VERIFICATION",
+                    request.getEmail(),
+                    String.format("Administrateur créé. IP: %s, expires: %s", clientIp, expiresAt),
+                    httpRequest,
+                    executionTime
+            );
+
+            // Envoyer l'email de vérification
+            try {
+                notificationClient.sendEmailVerification(
+                        request.getEmail(),
+                        request.getName(),
+                        verificationToken
+                );
+
+                // AUDIT: Email envoyé
+                auditMicroserviceClient.logAuditEvent(
+                        "VERIFICATION_EMAIL_SENT",
+                        request.getEmail(),
+                        "Email de vérification envoyé avec succès",
+                        httpRequest,
+                        0L
+                );
+
+            } catch (Exception emailError) {
+                // AUDIT: Erreur envoi email
+                auditMicroserviceClient.logSecurityEvent(
+                        "VERIFICATION_EMAIL_FAILED",
+                        request.getEmail(),
+                        "MEDIUM",
+                        "Échec envoi email de vérification: " + emailError.getMessage(),
+                        httpRequest
+                );
+            }
+
+            log.info("Administrateur créé en attente de vérification: {}", request.getEmail());
+
+            return RegisterResponse.builder()
+                    .message("Inscription réussie! Veuillez vérifier votre email pour activer votre compte.")
+                    .emailSent(true)
+                    .verificationRequired(true)
+                    .build();
+
+        } catch (Exception e) {
+            long executionTime = System.currentTimeMillis() - startTime;
+            auditMicroserviceClient.logSecurityEvent(
+                    "ADMIN_REGISTRATION_FAILED",
+                    request.getEmail(),
+                    "HIGH",
+                    String.format("Échec inscription depuis IP %s: %s", clientIp, e.getMessage()),
+                    httpRequest
+            );
+
+            log.error("Échec d'enregistrement pour: {}", request.getEmail(), e);
+            throw e;
+        }
+    }
+
+    /**
      * Renvoyer l'email de vérification
      */
     public void resendVerificationEmail(String email) {
@@ -267,6 +456,15 @@ public class AuthenticationService {
         // Renvoyer l'email
         String decryptedName = dataEncryption.decryptSensitiveData(user.getName());
         notificationClient.sendEmailVerification(email, decryptedName, verificationToken);
+        HttpServletRequest httpRequest = getCurrentHttpRequest();
+
+        auditMicroserviceClient.logSecurityEvent(
+                "EMAIL_VERIFICATION_STARTED",
+                email,
+                "LOW",
+                "Renvoie de l'email de vérification de mail",
+                httpRequest
+        );
 
         log.info("📧 Email de vérification renvoyé pour: {}", email);
     }
