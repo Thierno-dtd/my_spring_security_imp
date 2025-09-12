@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -202,10 +203,10 @@ public class OAuth2Service {
 
         // Créer un nouveau compte Google
         User newUser = User.builder()
-                .name(googleUserInfo.getName())
-                .pname(googleUserInfo.getFamilyName())
+                .name(googleUserInfo.getFamilyName())
+                .pname(googleUserInfo.getName())
                 .email(googleUserInfo.getEmail())
-                .passwd("") // Pas de mot de passe pour les comptes Google
+                .passwd(UUID.randomUUID().toString()) // Pas de mot de passe pour les comptes Google
                 .roles(TypeRoles.USER)
                 .emailVerified(googleUserInfo.isEmailVerified())
                 .accountStatus(googleUserInfo.isEmailVerified() ? AccountStatus.ACTIVE : AccountStatus.PENDING_VERIFICATION)
