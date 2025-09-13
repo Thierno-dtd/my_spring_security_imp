@@ -1,0 +1,13 @@
+{
+  "id": "email_change_confirmation_new",
+  "name": "Confirmation changement email - Nouvelle adresse",
+  "description": "Email de confirmation à envoyer à la nouvelle adresse",
+  "type": "SECURITY",
+  "emailSubject": "🔐 Confirmez votre nouvelle adresse email",
+  "emailTemplate": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Confirmation Email</title><style>body{font-family:Arial,sans-serif;margin:0;padding:0;background-color:#f4f4f4}.container{max-width:600px;margin:0 auto;background-color:white;padding:0}.header{background-color:#17a2b8;color:white;padding:20px;text-align:center}.content{padding:30px}.button{display:inline-block;background-color:#28a745;color:white;padding:12px 30px;text-decoration:none;border-radius:5px;margin:20px 0}.info{background-color:#d1ecf1;border:1px solid #bee5eb;color:#0c5460;padding:15px;border-radius:5px;margin:20px 0}.footer{background-color:#f8f9fa;padding:20px;text-align:center;font-size:12px;color:#6c757d}</style></head><body><div class=\"container\"><div class=\"header\"><h1>🔐 Confirmation Requise</h1><p>Confirmez votre nouvelle adresse email</p></div><div class=\"content\"><p>Bonjour {{name}},</p><p>Pour finaliser le changement d'adresse email de votre compte, veuillez confirmer que cette adresse vous appartient.</p><div class=\"info\"><p>En confirmant, cette adresse deviendra votre nouvelle adresse de connexion.</p></div><p style=\"text-align: center;\"><a href=\"{{confirmationUrl}}\" class=\"button\">Confirmer ma nouvelle adresse</a></p><p>Si le bouton ne fonctionne pas, copiez ce lien :</p><p style=\"word-break: break-all; background-color: #f8f9fa; padding: 10px; border-radius: 5px;\">{{confirmationUrl}}</p><p><strong>Important :</strong></p><ul><li>Ce lien expire dans 24 heures</li><li>Une fois confirmé, l'ancien email ne pourra plus être utilisé</li><li>Si ce n'est pas vous, ignorez cet email</li></ul><p>L'équipe Support</p></div><div class=\"footer\"><p>Cet email a été envoyé suite à une demande de changement d'adresse.</p><p>© 2024 Votre Entreprise. Tous droits réservés.</p></div></div></body></html>",
+  "smsTemplate": null,
+  "pushTemplate": null,
+  "webTemplate": null,
+  "variables": ["name", "confirmationUrl", "confirmationToken"],
+  "isActive": true
+}

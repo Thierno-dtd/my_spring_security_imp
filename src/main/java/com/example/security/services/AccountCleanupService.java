@@ -1,5 +1,6 @@
 package com.example.security.services;
 
+import com.example.security.dto.CleanupResult;
 import com.example.security.entites.User;
 import com.example.security.module.auditsLogs.AuditMicroserviceClient;
 import com.example.security.repositories.UserRepository;
@@ -138,11 +139,4 @@ public class AccountCleanupService {
                 .build();
     }
 
-    @Data
-    @Builder
-    public static class CleanupResult {
-        private int deletedCount;
-        private LocalDateTime cutoffDate;
-        private List<String> emails;
-    }
 }

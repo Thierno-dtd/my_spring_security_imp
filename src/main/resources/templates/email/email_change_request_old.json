@@ -1,0 +1,13 @@
+{
+  "id": "email_change_request_old",
+  "name": "Demande changement email - ancienne adresse",
+  "description": "Template pour notifier l'ancienne adresse d'une demande de changement",
+  "type": "SECURITY",
+  "emailSubject": "⚠️ Demande de changement d'adresse email",
+  "emailTemplate": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Changement Email</title><style>body{font-family:Arial,sans-serif;margin:0;padding:0;background-color:#f4f4f4}.container{max-width:600px;margin:0 auto;background-color:white;padding:0}.header{background-color:#ffc107;color:#212529;padding:20px;text-align:center}.content{padding:30px}.warning-box{background-color:#fff3cd;border:1px solid #ffeaa7;padding:15px;border-radius:5px;margin:20px 0}.footer{background-color:#f8f9fa;padding:20px;text-align:center;font-size:12px;color:#6c757d}</style></head><body><div class=\"container\"><div class=\"header\"><h1>⚠️ Changement d'Email</h1><p>Demande de modification en cours</p></div><div class=\"content\"><p>Bonjour {{name}},</p><p>Une demande de changement d'adresse email a été initiée pour votre compte.</p><div class=\"warning-box\"><h3>📧 Détails de la demande</h3><p><strong>Ancienne adresse :</strong> Cette adresse ({{oldEmail}})</p><p><strong>Nouvelle adresse :</strong> {{newEmail}}</p><p><strong>Date de la demande :</strong> {{requestDate}}</p></div><p><strong>Si c'était vous :</strong> Un email de confirmation a été envoyé à la nouvelle adresse. Le changement ne sera effectif qu'après confirmation.</p><p><strong>Si ce n'était pas vous :</strong> Votre compte pourrait être compromis. Connectez-vous immédiatement et changez votre mot de passe.</p><p>Cette demande expirera automatiquement dans 24 heures si elle n'est pas confirmée.</p><p>Cordialement,<br>L'équipe Sécurité</p></div><div class=\"footer\"><p>Cet email vous informe d'une tentative de modification de votre compte.</p><p>© 2024 Votre Entreprise. Tous droits réservés.</p></div></div></body></html>",
+  "smsTemplate": null,
+  "pushTemplate": null,
+  "webTemplate": null,
+  "variables": ["name", "oldEmail", "newEmail", "requestDate"],
+  "isActive": true
+}

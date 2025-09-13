@@ -208,4 +208,49 @@ public class JwtService {
             throw new RuntimeException("Impossible de créer la clé JWT", e);
         }
     }
+
+    /**
+     * Génère un token avec un ID de session inclus
+     */
+    public String generateTokenWithSession(UserDetails userDetails, String sessionId) {
+        Map<String, Object> extraClaims = new HashMap<>();
+
+        // Inclure les rôles
+        extraClaims.put("roles", userDetails.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.toList()));
+
+        // Inclure l'ID utilisateur
+        if (userDetails instanceof User) {
+            extraClaims.put("userId", ((User) userDetails).getId());
+        }
+
+        // Inclure l'ID de session
+        extraClaims.put("sessionId", sessionId);
+
+        // Inclure le timestamp de création
+        extraClaims.put("createdAt", System.currentTimeMillis());
+
+        return generateToken(extraClaims, userDetails);
+    }
+
+    /**
+     * Extrait l'ID de session du token
+     */
+    public String extractSessionId(String token) {
+        return extractClaim(token, claims -> (String) claims.get("sessionId"));
+    }
+
+    /**
+     * Vérifie si le token contient un ID de session valide
+     */
+    public boolean hasValidSession(String token) {
+        try {
+            String sessionId = extractSessionId(token);
+            return sessionId != null && !sessionId.trim().isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
 }
